@@ -60,6 +60,7 @@ class _DiarioScreenState extends ConsumerState<DiarioScreen>
 
   final GlobalKey _globalKey = GlobalKey();
   bool _isSharing = false;
+  bool _isTimerPaused = false;
 
   @override
   void initState() {
@@ -129,6 +130,8 @@ class _DiarioScreenState extends ConsumerState<DiarioScreen>
         timer.cancel();
         return;
       }
+      if (_isTimerPaused) return;
+
       final duration = DateTime.now().difference(_challengeStartTime!);
       final minutes = duration.inMinutes.toString().padLeft(2, '0');
       final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
@@ -173,6 +176,17 @@ class _DiarioScreenState extends ConsumerState<DiarioScreen>
         await repo.grantAdRewardTicket(user.id);
 
         ref.invalidate(userProfileProvider);
+
+        // Reanudar temporizador si estaba pausado
+        if (mounted) {
+          setState(() {
+            _isTimerPaused = false;
+            // Ajustar el _challengeStartTime para no contar el tiempo que estuvo pausado
+            // Opcionalmente, para simplificar, solo reanudamos el stopwatch
+          });
+          _sessionStopwatch.start();
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('¡Intento extra desbloqueado! 🎟️')),
         );
@@ -986,6 +1000,13 @@ class _DiarioScreenState extends ConsumerState<DiarioScreen>
       final remaining =
           3 - (currentAttempts + 1); // +1 porque el repo ya contó el actual
 
+      if (remaining <= 0) {
+        _sessionStopwatch.stop();
+        setState(() {
+          _isTimerPaused = true;
+        });
+      }
+
       ref.invalidate(
         attemptsProvider((challengeId: challengeId, userId: userId)),
       );
@@ -994,13 +1015,123 @@ class _DiarioScreenState extends ConsumerState<DiarioScreen>
     }
   }
 
+  Future<void> _abandonChallenge(String challengeId) async {
+    final userData = ref.read(userProfileProvider).value;
+    final guestId = ref.read(guestIdProvider);
+    final userId = userData != null ? userData['id'] : guestId;
+
+    if (userId == null) return;
+
+    setState(() => _isSubmitting = true);
+    _sessionStopwatch.stop();
+
+    final elapsedSeconds = _sessionStopwatch.elapsed.inSeconds;
+    final repo = ref.read(retosRepositoryProvider);
+
+    await repo.abandonChallenge(challengeId, userId, elapsedSeconds);
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('challenge_start_$challengeId');
+
+    if (!mounted) return;
+    setState(() => _isSubmitting = false);
+
+    ref.invalidate(userProfileProvider);
+    ref.invalidate(userStatsProvider);
+    ref.invalidate(userSessionsProvider);
+    ref.invalidate(dailySessionsProvider);
+    ref.invalidate(weeklyProgressProvider);
+    ref.invalidate(globalRankingProvider);
+    ref.invalidate(dailyRankingProvider);
+    ref.invalidate(
+      attemptsProvider((challengeId: challengeId, userId: userId)),
+    );
+    ref.invalidate(dailyChallengesProvider);
+    _answerController.clear();
+  }
+
+  Future<bool> _showAbandonConfirmationDialog(String? challengeId) async {
+    final bool? result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: theme.colorScheme.outlineVariant.withOpacity(0.5),
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.warning_rounded,
+                  color: Colors.orange,
+                  size: 48,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  '¿Estás seguro de abandonar?',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Si sales ahora, el reto se marcará como fallado y perderás la oportunidad de ganarlo hoy.',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('ME QUEDO'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: () {
+                          if (challengeId != null) {
+                            _abandonChallenge(challengeId);
+                          }
+                          Navigator.pop(ctx, true);
+                        },
+                        style: FilledButton.styleFrom(
+                          backgroundColor: theme.colorScheme.error,
+                          foregroundColor: theme.colorScheme.onError,
+                        ),
+                        child: const Text('ABANDONAR'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    return result ?? false;
+  }
+
   Future<void> _shareResultImage() async {
     if (_isSharing) return;
 
     setState(() => _isSharing = true);
 
     try {
-      // Damos un momento por si la UI necesita refrescar el estado de carga
       await Future.delayed(const Duration(milliseconds: 100));
 
       final boundary =
@@ -1198,221 +1329,266 @@ class _DiarioScreenState extends ConsumerState<DiarioScreen>
       }
     });
 
-    return Scaffold(
-      appBar: AppBar(
-        titleSpacing: 0,
-        title: userAsync.when(
-          data: (user) {
-            final xp = user?['xp'] ?? 0;
-            final streak = user?['current_streak'] ?? 0;
-            return Padding(
-              padding: const EdgeInsets.only(left: 16.0),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: _showXPInfo,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.amber.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: Colors.amber.withOpacity(0.3),
-                          width: 1,
+    bool isChallengeActive = false;
+    String? currentChallengeId;
+    if (challengesAsync.hasValue &&
+        challengesAsync.value != null &&
+        challengesAsync.value!.isNotEmpty) {
+      final challenge = challengesAsync.value!.first;
+      final bool isCompleted = challenge['is_completed'] == true;
+      if (_isChallengeStarted && !isCompleted) {
+        isChallengeActive = true;
+        currentChallengeId = challenge['id'];
+      }
+    }
+
+    return PopScope(
+      canPop: !isChallengeActive,
+      onPopInvoked: (didPop) async {
+        if (didPop) return;
+        final bool shouldPop = await _showAbandonConfirmationDialog(
+          currentChallengeId,
+        );
+        if (shouldPop && mounted) {
+          // Si usan GoRouter, GoRouter escucha el pop internamente, pero por si acaso
+          Navigator.of(context).pop();
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          titleSpacing: 0,
+          title: userAsync.when(
+            data: (user) {
+              final xp = user?['xp'] ?? 0;
+              final streak = user?['current_streak'] ?? 0;
+              return Padding(
+                padding: const EdgeInsets.only(left: 16.0),
+                child: Row(
+                  children: [
+                    GestureDetector(
+                      onTap: _showXPInfo,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
                         ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.bolt_rounded,
-                            color: Colors.amber,
-                            size: 16,
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: Colors.amber.withOpacity(0.3),
+                            width: 1,
                           ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '$xp',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.bolt_rounded,
                               color: Colors.amber,
+                              size: 16,
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: _showStreakDetails,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: Colors.orange.withOpacity(0.3),
-                          width: 1,
+                            const SizedBox(width: 4),
+                            Text(
+                              '$xp',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.amber,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.local_fire_department_rounded,
-                            color: Colors.orange,
-                            size: 16,
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: _showStreakDetails,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: Colors.orange.withOpacity(0.3),
+                            width: 1,
                           ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '$streak',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.local_fire_department_rounded,
                               color: Colors.orange,
+                              size: 16,
                             ),
-                          ),
-                        ],
+                            const SizedBox(width: 4),
+                            Text(
+                              '$streak',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.orange,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
+                  ],
+                ),
+              );
+            },
+            loading: () => const SizedBox.shrink(),
+            error: (_, __) => const SizedBox.shrink(),
+          ),
+          centerTitle: false,
+          actions: [
+            SizedBox(
+              height: 32,
+              child: FilledButton.icon(
+                onPressed: _showHistory,
+                icon: const Icon(Icons.history_rounded, size: 18),
+                label: const Text(
+                  'Historial',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                ],
-              ),
-            );
-          },
-          loading: () => const SizedBox.shrink(),
-          error: (_, __) => const SizedBox.shrink(),
-        ),
-        centerTitle: false,
-        actions: [
-          SizedBox(
-            height: 32,
-            child: FilledButton.icon(
-              onPressed: _showHistory,
-              icon: const Icon(Icons.history_rounded, size: 18),
-              label: const Text(
-                'Historial',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-              ),
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
                 ),
               ),
             ),
-          ),
-          const SizedBox(width: 12),
-        ],
-      ),
-      body: AppRefreshIndicator(
-        onRefresh: _handleRefresh,
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Cabecera de racha
-              userAsync.when(
-                data: (user) {
-                  final challenges = challengesAsync.value ?? [];
-                  final bool isCompleted =
-                      challenges.isNotEmpty &&
-                      (challenges.first['is_completed'] == true);
-                  if (!isCompleted) return const SizedBox.shrink();
+            const SizedBox(width: 12),
+          ],
+        ),
+        body: AppRefreshIndicator(
+          onRefresh: _handleRefresh,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Cabecera de racha
+                userAsync.when(
+                  data: (user) {
+                    final challenges = challengesAsync.value ?? [];
+                    final bool isCompleted =
+                        challenges.isNotEmpty &&
+                        (challenges.first['is_completed'] == true);
+                    final bool isAbandoned =
+                        challenges.isNotEmpty &&
+                        (challenges.first['is_abandoned'] == true);
 
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.center,
+                    if (!isCompleted) return const SizedBox.shrink();
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Text(
+                            isAbandoned
+                                ? '¡Reto Fallado!'
+                                : '¡Ya lo conseguiste hoy!',
+                            style: textTheme.headlineSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: isAbandoned
+                                  ? theme.colorScheme.error
+                                  : null,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            isAbandoned
+                                ? 'Vuelve mañana para intentarlo de nuevo.'
+                                : 'Vuelve mañana para un nuevo desafío.',
+                            style: textTheme.bodyMedium?.copyWith(
+                              color: isAbandoned
+                                  ? theme.colorScheme.error
+                                  : Colors.green,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, __) => const SizedBox.shrink(),
+                ),
+
+                challengesAsync.when(
+                  loading: () => const ScannerLoading(),
+                  error: (err, stack) => Center(child: Text('Error: $err')),
+                  data: (challenges) {
+                    if (challenges.isEmpty)
+                      return const Center(
+                        child: Text('No hay retos para hoy.'),
+                      );
+
+                    final challengeData = challenges.first;
+                    final userData = userAsync.value;
+                    final bool isGuest = ref.watch(currentUserProvider) == null;
+                    final String currentUserId = isGuest
+                        ? ref.watch(guestIdProvider)
+                        : (userData?['id'] ?? '');
+
+                    final attemptsAsync = ref.watch(
+                      attemptsProvider((
+                        challengeId: challengeData['id'],
+                        userId: currentUserId,
+                      )),
+                    );
+
+                    final bool isCompleted =
+                        challengeData['is_completed'] == true;
+
+                    return Column(
                       children: [
-                        Text(
-                          '¡Ya lo conseguiste hoy!',
-                          style: textTheme.headlineSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
+                        if (!_isChallengeStarted && !isCompleted)
+                          _buildChallengeIntro(theme, textTheme),
+
+                        if (_isChallengeStarted && !isCompleted) ...[
+                          _buildChallengeContent(
+                            theme,
+                            textTheme,
+                            challengeData,
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Vuelve mañana para un nuevo desafío.',
-                          style: textTheme.bodyMedium?.copyWith(
-                            color: Colors.green,
-                            fontWeight: FontWeight.w500,
+                          const SizedBox(height: 20),
+                          _buildChallengeInput(
+                            theme,
+                            textTheme,
+                            challengeData,
+                            attemptsAsync,
+                            userAsync,
                           ),
-                        ),
+                        ],
+
+                        if (isCompleted)
+                          _buildSuccessView(
+                            theme,
+                            textTheme,
+                            challengeData,
+                            attemptsAsync,
+                            userAsync,
+                          ),
+
+                        if (isGuest) ...[
+                          const SizedBox(height: 8),
+                          _buildGuestConversionCTA(theme, textTheme),
+                        ],
                       ],
-                    ),
-                  );
-                },
-                loading: () => const SizedBox.shrink(),
-                error: (_, __) => const SizedBox.shrink(),
-              ),
-
-              challengesAsync.when(
-                loading: () => const ScannerLoading(),
-                error: (err, stack) => Center(child: Text('Error: $err')),
-                data: (challenges) {
-                  if (challenges.isEmpty)
-                    return const Center(child: Text('No hay retos para hoy.'));
-
-                  final challengeData = challenges.first;
-                  final userData = userAsync.value;
-                  final bool isGuest = ref.watch(currentUserProvider) == null;
-                  final String currentUserId = isGuest
-                      ? ref.watch(guestIdProvider)
-                      : (userData?['id'] ?? '');
-
-                  final attemptsAsync = ref.watch(
-                    attemptsProvider((
-                      challengeId: challengeData['id'],
-                      userId: currentUserId,
-                    )),
-                  );
-
-                  final bool isCompleted =
-                      challengeData['is_completed'] == true;
-
-                  return Column(
-                    children: [
-                      if (!_isChallengeStarted && !isCompleted)
-                        _buildChallengeIntro(theme, textTheme),
-
-                      if (_isChallengeStarted && !isCompleted) ...[
-                        _buildChallengeContent(theme, textTheme, challengeData),
-                        const SizedBox(height: 20),
-                        _buildChallengeInput(
-                          theme,
-                          textTheme,
-                          challengeData,
-                          attemptsAsync,
-                          userAsync,
-                        ),
-                      ],
-
-                      if (isCompleted)
-                        _buildSuccessView(
-                          theme,
-                          textTheme,
-                          challengeData,
-                          attemptsAsync,
-                          userAsync,
-                        ),
-
-                      if (isGuest) ...[
-                        const SizedBox(height: 8),
-                        _buildGuestConversionCTA(theme, textTheme),
-                      ],
-                    ],
-                  );
-                },
-              ),
-            ],
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1791,6 +1967,28 @@ class _DiarioScreenState extends ConsumerState<DiarioScreen>
                     ),
                   ),
                 ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _abandonChallenge(challengeData['id']),
+                    icon: const Icon(Icons.close_rounded, color: Colors.grey),
+                    label: const Text(
+                      'TERMINAR RETO',
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: Colors.grey.withOpacity(0.5)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
               ],
             );
           }
@@ -1840,6 +2038,8 @@ class _DiarioScreenState extends ConsumerState<DiarioScreen>
     AsyncValue<int> attemptsAsync,
     AsyncValue<dynamic> userAsync,
   ) {
+    final bool isAbandoned = challengeData['is_abandoned'] == true;
+
     return Column(
       children: [
         RepaintBoundary(
@@ -1856,11 +2056,35 @@ class _DiarioScreenState extends ConsumerState<DiarioScreen>
                         .withOpacity(0.3),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                      color: theme.colorScheme.outlineVariant.withOpacity(0.5),
+                      color: isAbandoned
+                          ? theme.colorScheme.error.withOpacity(0.5)
+                          : theme.colorScheme.outlineVariant.withOpacity(0.5),
                     ),
                   ),
                   child: Column(
                     children: [
+                      if (isAbandoned)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 16.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.cancel_rounded,
+                                color: theme.colorScheme.error,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'RETO NO SUPERADO',
+                                style: TextStyle(
+                                  color: theme.colorScheme.error,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       () {
                         final count = challengeData['attempts'] ?? 0;
                         final timeTaken = challengeData['time_taken'] ?? 0;
@@ -1878,7 +2102,7 @@ class _DiarioScreenState extends ConsumerState<DiarioScreen>
                                     'TU TIEMPO',
                                     "$m:$s",
                                     Icons.timer_outlined,
-                                    Colors.blue,
+                                    isAbandoned ? Colors.grey : Colors.blue,
                                   ),
                                 ),
                                 Container(
@@ -1890,8 +2114,12 @@ class _DiarioScreenState extends ConsumerState<DiarioScreen>
                                   child: _buildMinimalStat(
                                     'INTENTOS USADOS',
                                     '$count',
-                                    Icons.check_circle_outline,
-                                    Colors.green,
+                                    isAbandoned
+                                        ? Icons.cancel_outlined
+                                        : Icons.check_circle_outline,
+                                    isAbandoned
+                                        ? theme.colorScheme.error
+                                        : Colors.green,
                                   ),
                                 ),
                               ],
@@ -1910,7 +2138,9 @@ class _DiarioScreenState extends ConsumerState<DiarioScreen>
                                   ),
                                   decoration: BoxDecoration(
                                     color: isLast
-                                        ? Colors.green
+                                        ? (isAbandoned
+                                              ? theme.colorScheme.error
+                                              : Colors.green)
                                         : Colors.white24,
                                     borderRadius: BorderRadius.circular(3),
                                   ),
@@ -2120,8 +2350,8 @@ class _DiarioScreenState extends ConsumerState<DiarioScreen>
         const SizedBox(height: 4),
         Text(
           value,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: color == Colors.grey ? Colors.grey : Colors.white,
             fontSize: 24,
             fontFamily: 'monospace',
             fontWeight: FontWeight.bold,

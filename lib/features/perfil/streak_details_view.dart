@@ -196,7 +196,7 @@ class _StreakDetailsScreenState extends ConsumerState<StreakDetailsScreen>
                         );
                       },
                       loading: () => _buildWeeklyProgressRow(
-                        List.filled(7, false),
+                        List.filled(7, 0),
                         isSkeleton: true,
                       ),
                       error: (_, __) => const Text('No disponible'),
@@ -265,7 +265,7 @@ class _StreakDetailsScreenState extends ConsumerState<StreakDetailsScreen>
   }
 
   Widget _buildWeeklyProgressRow(
-    List<bool> progress, {
+    List<int> progress, {
     bool isSkeleton = false,
     DateTime? shieldedDay,
   }) {
@@ -304,12 +304,17 @@ class _StreakDetailsScreenState extends ConsumerState<StreakDetailsScreen>
               shieldedDate != null &&
               currentDayNorm == shieldedDate;
 
+          final status = (diffFromToday >= 0 && diffFromToday < 7) ? progress[diffFromToday] : 0;
+
           final isCompleted = 
               !isSkeleton && 
               !isShielded && 
-              diffFromToday >= 0 && 
-              diffFromToday < 7 && 
-              progress[diffFromToday];
+              status == 1;
+
+          final isFailed = 
+              !isSkeleton && 
+              !isShielded && 
+              status == -1;
           
           final isToday = diffFromToday == 0;
           final dayLabel = daysLabels[currentDay.weekday - 1];
@@ -319,14 +324,16 @@ class _StreakDetailsScreenState extends ConsumerState<StreakDetailsScreen>
               Text(
                 dayLabel,
                 style: TextStyle(
-                  color: isToday
+                  color: isFailed
+                      ? Theme.of(context).colorScheme.error
+                      : isToday
                       ? Colors.white
                       : isCompleted
                       ? Colors.green
                       : isShielded
                       ? Colors.greenAccent
                       : Colors.white54,
-                  fontWeight: (isToday || isShielded || isCompleted)
+                  fontWeight: (isToday || isShielded || isCompleted || isFailed)
                       ? FontWeight.bold
                       : FontWeight.normal,
                   fontSize: 12,
@@ -340,13 +347,17 @@ class _StreakDetailsScreenState extends ConsumerState<StreakDetailsScreen>
                   shape: BoxShape.circle,
                   color: isSkeleton
                       ? Colors.white.withOpacity(0.05)
+                      : isFailed
+                      ? Theme.of(context).colorScheme.error.withOpacity(0.2)
                       : isCompleted
                       ? Colors.green.withOpacity(0.2)
                       : isShielded
                       ? Colors.greenAccent.withOpacity(0.15)
                       : Colors.white.withAlpha(25),
                   border: Border.all(
-                    color: !isSkeleton && isCompleted
+                    color: !isSkeleton && isFailed
+                        ? Theme.of(context).colorScheme.error
+                        : !isSkeleton && isCompleted
                         ? Colors.green
                         : !isSkeleton && isShielded
                         ? Colors.greenAccent.withOpacity(0.6)
@@ -354,7 +365,9 @@ class _StreakDetailsScreenState extends ConsumerState<StreakDetailsScreen>
                     width: 2,
                   ),
                 ),
-                child: !isSkeleton && isCompleted
+                child: !isSkeleton && isFailed
+                    ? Icon(Icons.close, color: Theme.of(context).colorScheme.error, size: 18)
+                    : !isSkeleton && isCompleted
                     ? const Icon(Icons.check, color: Colors.green, size: 18)
                     : !isSkeleton && isShielded
                     ? const Icon(

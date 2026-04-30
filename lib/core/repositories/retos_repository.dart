@@ -259,7 +259,8 @@ class RetosRepository {
               'technology': row['technology']?.toString() ?? '',
               'level': row['level']?.toString() ?? '',
               'is_completed':
-                  row['is_completed'] == 1 || row['is_completed'] == '1',
+                  row['is_completed'] == 1 || row['is_completed'] == '1' || row['is_completed'] == -1 || row['is_completed'] == '-1',
+              'is_abandoned': row['is_completed'] == -1 || row['is_completed'] == '-1',
               'time_taken': _toInt(row['time_taken']),
               'attempts': _toInt(row['user_attempts']),
             },
@@ -663,6 +664,47 @@ class RetosRepository {
     } catch (e) {
       print('Exception submitAnswer: $e');
       return (isCorrect: false, xpEarned: 0);
+    }
+  }
+
+  /// Marca un reto como abandonado (fallado permanentemente)
+  Future<void> abandonChallenge(String challengeId, String userId, int timeSeconds) async {
+    try {
+      final String todayStr = DateTime.now().toIso8601String().substring(0, 10);
+      final sessionId = 'sess_${DateTime.now().millisecondsSinceEpoch}';
+
+      // Asegurar integridad del usuario
+      await _client.execute('''
+        INSERT OR IGNORE INTO users (id, username, name, email, xp, current_streak, is_pro)
+        VALUES ('$userId', 'guest_${userId.substring(0, 8)}', 'Invitado', 'guest_$userId@devretos.com', 0, 0, 0)
+      ''');
+
+      await _client.execute('''
+        INSERT INTO user_sessions (id, user_id, challenge_id, time_taken_seconds, is_success, attempts, completed_at, completion_date, xp_earned)
+        VALUES ('$sessionId', '$userId', '$challengeId', $timeSeconds, -1, 3, CURRENT_TIMESTAMP, '$todayStr', 0)
+        ON CONFLICT(user_id, challenge_id) DO UPDATE SET 
+          attempts = 3,
+          time_taken_seconds = $timeSeconds,
+          is_success = -1,
+          completed_at = CURRENT_TIMESTAMP,
+          completion_date = '$todayStr'
+      ''');
+      
+      // Al abandonar no se rompe la racha de inmediato aquí, porque la racha se rompe por inactividad diaria.
+      // Pero sí actualizamos last_played_date para que cuente como que interactuó (aunque falló).
+      await _client.execute('''
+        UPDATE users SET 
+          last_played_date = CASE 
+            WHEN EXISTS (SELECT 1 FROM daily_challenges WHERE display_date = '$todayStr' AND challenge_id = '$challengeId') 
+            THEN '$todayStr' 
+            ELSE last_played_date 
+          END
+        WHERE id = '$userId'
+      ''');
+
+      print('🚩 Reto $challengeId abandonado por usuario $userId');
+    } catch (e) {
+      print('Exception abandonChallenge: $e');
     }
   }
 
@@ -1255,7 +1297,7 @@ class RetosRepository {
   }
 
   /// Obtiene el progreso de los últimos 7 días (para el calendario de racha)
-  Future<List<bool>> getWeeklyProgress(String userId) async {
+  Future<List<int>> getWeeklyProgress(String userId) async {
     try {
       final now = DateTime.now();
       final sevenDaysAgo = now.subtract(const Duration(days: 7));
@@ -1263,31 +1305,31 @@ class RetosRepository {
 
       // Una sola consulta para toda la semana
       final resultSet = await _client.query('''
-        SELECT completion_date, COUNT(*) as count
+        SELECT completion_date, MAX(is_success) as status
         FROM user_sessions 
         WHERE user_id = '$userId' 
-        AND is_success = 1 
         AND completion_date >= '$sevenDaysAgoStr'
         AND EXISTS (SELECT 1 FROM daily_challenges dc WHERE dc.challenge_id = user_sessions.challenge_id AND dc.display_date = user_sessions.completion_date)
         GROUP BY completion_date
       ''');
 
-      // Mapear resultados a un Set para búsqueda rápida
-      final Set<String> completedDates = resultSet
-          .map((row) => row['completion_date'].toString())
-          .toSet();
+      // Mapear resultados
+      final Map<String, int> dateStatus = {
+        for (var row in resultSet)
+          row['completion_date'].toString(): _toInt(row['status'])
+      };
 
-      final List<bool> progress = [];
+      final List<int> progress = [];
       for (int i = 0; i < 7; i++) {
         final day = now.subtract(Duration(days: i));
         final dayStr = day.toIso8601String().substring(0, 10);
-        progress.add(completedDates.contains(dayStr));
+        progress.add(dateStatus[dayStr] ?? 0);
       }
 
       return progress;
     } catch (e) {
       print('Exception getWeeklyProgress: $e');
-      return List.filled(7, false);
+      return List.filled(7, 0);
     }
   }
 
@@ -1566,7 +1608,7 @@ final userStatsProvider = FutureProvider<Map<String, dynamic>>((ref) async {
   return repo.getUserStats(userId);
 });
 
-final weeklyProgressProvider = FutureProvider<List<bool>>((ref) async {
+final weeklyProgressProvider = FutureProvider<List<int>>((ref) async {
   final repo = ref.watch(retosRepositoryProvider);
   final user = ref.watch(currentUserProvider);
   final guestId = ref.watch(guestIdProvider);
