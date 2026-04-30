@@ -214,6 +214,7 @@ class _SolvingScreenState extends ConsumerState<SolvingScreen>
       timeTaken,
       usedHelp: _usedHelp,
       knownAnswer: _challenge!['correct_answer']?.toString(),
+      isPractice: true,
     );
 
     if (!mounted) return;
@@ -255,7 +256,6 @@ class _SolvingScreenState extends ConsumerState<SolvingScreen>
           _timeTaken = timeTaken;
         });
       } else {
-        // Si es PRO, pasamos un número negativo o muy alto para que el diálogo sepa que es infinito
         IncorrectAnswerDialog.show(
           context,
           isPro ? -1 : (_maxAttempts - _attempts),
@@ -398,7 +398,6 @@ class _SolvingScreenState extends ConsumerState<SolvingScreen>
                           ],
                         ),
                         const SizedBox(height: 16),
-                        // Cuadrados de intentos o infinito
                         if (isPro)
                           const Row(
                             mainAxisAlignment: MainAxisAlignment.center,

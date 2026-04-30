@@ -1,6 +1,7 @@
 import 'package:dev_retos/core/providers/guest_provider.dart';
 import 'package:libsql_dart/libsql_dart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../data/seed_challenges.dart';
 import '../database/turso_client.dart';
 import '../services/ai_challenge_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,7 +22,6 @@ class RetosRepository {
     return 0;
   }
 
-  /// Elimina todos los datos de un usuario en Turso (sesiones y perfil).
   Future<void> deleteUserAccount(String userId) async {
     print('DEBUG DB: Eliminando datos del usuario $userId...');
     await _client.execute(
@@ -30,14 +30,13 @@ class RetosRepository {
     await _client.execute("DELETE FROM users WHERE id = '$userId'");
   }
 
-  /// Ejecuta migraciones para crear tablas y mock data si no existen.
   Future<void> initDatabase() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final isDbInitialized = prefs.getBool('db_initialized') ?? false;
 
       // Activa esta línea solo UNA vez para limpiar todo antes del lanzamiento con F5
-      // await _clearAllData();
+      // await clearAllData();
 
       // 1. Habilitar FK
       await _client.execute('PRAGMA foreign_keys = ON;');
@@ -71,7 +70,8 @@ class RetosRepository {
           correct_answer TEXT NOT NULL,
           technology TEXT NOT NULL,
           level TEXT NOT NULL,
-          is_premium INTEGER DEFAULT 0,
+          is_ai INTEGER DEFAULT 0,
+          creator_id TEXT,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
       ''');
@@ -104,7 +104,6 @@ class RetosRepository {
       ''');
         print('DEBUG DB: Tabla user_sessions verificada/creada.');
 
-        // Agregado de migración sin ruptura: Columna xp_earned
         try {
           await _client.execute(
             'ALTER TABLE user_sessions ADD COLUMN xp_earned INTEGER DEFAULT 0',
@@ -112,9 +111,7 @@ class RetosRepository {
           print(
             'DEBUG DB: Columna xp_earned añadida a user_sessions (Migración O.K.)',
           );
-        } catch (_) {
-          // Si ya existe u ocurre error, ignoramos silenciosamente
-        }
+        } catch (_) {}
 
         try {
           await _client.execute(
@@ -142,7 +139,6 @@ class RetosRepository {
           'ALTER TABLE user_sessions ADD COLUMN completion_date DATE',
         );
         print('DEBUG DB: Columna completion_date añadida a user_sessions');
-        // Poblamos datos antiguos usando UTC como fallback (mejor que NULL)
         await _client.execute(
           "UPDATE user_sessions SET completion_date = DATE(completed_at, 'localtime') WHERE completion_date IS NULL",
         );
@@ -150,11 +146,21 @@ class RetosRepository {
 
       try {
         await _client.execute(
-          'ALTER TABLE challenges ADD COLUMN is_ai INTEGER DEFAULT 0',
+          'ALTER TABLE user_sessions ADD COLUMN is_practice INTEGER DEFAULT 0',
         );
+        print('DEBUG DB: Columna is_practice añadida a user_sessions');
+
+        // Migrar sesiones antiguas de práctica
+        await _client.execute('''
+          UPDATE user_sessions SET is_practice = 1 
+          WHERE NOT EXISTS (
+            SELECT 1 FROM daily_challenges dc 
+            WHERE dc.challenge_id = user_sessions.challenge_id 
+            AND dc.display_date = user_sessions.completion_date
+          )
+        ''');
       } catch (_) {}
 
-      // Migración de Índice para Analíticas PRO
       try {
         await _client.execute(
           'CREATE INDEX IF NOT EXISTS idx_user_sessions_stats ON user_sessions (user_id, is_success, completion_date)',
@@ -167,10 +173,8 @@ class RetosRepository {
         );
       } catch (_) {}
 
-      // Re-verificación de retos (por si se borró la DB remota pero no las prefs locales)
       await _seedInitialChallenges();
 
-      // 9. Seleccionar 3 retos diarios para los últimos 7 días si no existen
       for (int i = 0; i < 7; i++) {
         final date = DateTime.now().subtract(Duration(days: i));
         final dateStr = date.toIso8601String().substring(0, 10);
@@ -180,38 +184,13 @@ class RetosRepository {
         );
 
         if (checkDaily.isEmpty) {
-          // Intentar obtener retos que el usuario ya completó este día para "reparar" la racha
-          final completedOnDay = await _client.query('''
-            SELECT challenge_id FROM user_sessions 
-            WHERE completion_date = '$dateStr' AND is_success = 1
-            LIMIT 3
-          ''');
-
-          final List<String> existingCids = checkDaily
-              .map((d) => d['challenge_id'].toString())
-              .toList();
-          final List<String> toAdd = [];
-
-          // Priorizar los que ya hizo el usuario
-          for (var row in completedOnDay) {
-            final cid = row['challenge_id'].toString();
-            if (!existingCids.contains(cid)) toAdd.add(cid);
-          }
-
-          // Rellenar con aleatorios si faltan hasta llegar a 3
-          if (toAdd.length + existingCids.length < 1) {
-            final needed = 1 - (toAdd.length + existingCids.length);
-            final randomChallenges = await _client.query(
-              "SELECT id FROM challenges WHERE id NOT IN (${[...existingCids, ...toAdd].map((e) => "'$e'").join(',')}) ORDER BY RANDOM() LIMIT $needed",
-            );
-            for (var row in randomChallenges) {
-              toAdd.add(row['id'].toString());
-            }
-          }
-
-          for (var cid in toAdd) {
+          final randomChallenges = await _client.query(
+            "SELECT id FROM challenges ORDER BY RANDOM() LIMIT 1",
+          );
+          if (randomChallenges.isNotEmpty) {
+            final cid = randomChallenges.first['id'].toString();
             await _client.execute(
-              "INSERT OR REPLACE INTO daily_challenges (display_date, challenge_id) VALUES ('$dateStr', '$cid')",
+              "INSERT OR IGNORE INTO daily_challenges (display_date, challenge_id) VALUES ('$dateStr', '$cid')",
             );
           }
         }
@@ -259,8 +238,12 @@ class RetosRepository {
               'technology': row['technology']?.toString() ?? '',
               'level': row['level']?.toString() ?? '',
               'is_completed':
-                  row['is_completed'] == 1 || row['is_completed'] == '1' || row['is_completed'] == -1 || row['is_completed'] == '-1',
-              'is_abandoned': row['is_completed'] == -1 || row['is_completed'] == '-1',
+                  row['is_completed'] == 1 ||
+                  row['is_completed'] == '1' ||
+                  row['is_completed'] == -1 ||
+                  row['is_completed'] == '-1',
+              'is_abandoned':
+                  row['is_completed'] == -1 || row['is_completed'] == '-1',
               'time_taken': _toInt(row['time_taken']),
               'attempts': _toInt(row['user_attempts']),
             },
@@ -298,9 +281,9 @@ class RetosRepository {
       final start = DateTime.now();
       final queryJob = _client.query('''
         SELECT u.*,
-          COALESCE((SELECT COUNT(*) FROM user_sessions us WHERE us.user_id = u.id AND EXISTS (SELECT 1 FROM daily_challenges dc WHERE dc.challenge_id = us.challenge_id AND dc.display_date = us.completion_date)), 0) as total_played,
-          COALESCE((SELECT COUNT(*) FROM user_sessions us WHERE us.user_id = u.id AND EXISTS (SELECT 1 FROM daily_challenges dc WHERE dc.challenge_id = us.challenge_id AND dc.display_date = us.completion_date) AND us.is_success = 1), 0) as total_won,
-          COALESCE((SELECT MIN(us.time_taken_seconds) FROM user_sessions us WHERE us.user_id = u.id AND EXISTS (SELECT 1 FROM daily_challenges dc WHERE dc.challenge_id = us.challenge_id AND dc.display_date = us.completion_date) AND us.is_success = 1), 0) as best_time
+          COALESCE((SELECT COUNT(*) FROM user_sessions us WHERE us.user_id = u.id AND us.is_practice = 0), 0) as total_played,
+          COALESCE((SELECT COUNT(*) FROM user_sessions us WHERE us.user_id = u.id AND us.is_practice = 0 AND us.is_success = 1), 0) as total_won,
+          COALESCE((SELECT MIN(us.time_taken_seconds) FROM user_sessions us WHERE us.user_id = u.id AND us.is_practice = 0 AND us.is_success = 1), 0) as best_time
         FROM users u 
         WHERE u.id = '$userId'
       ''');
@@ -308,7 +291,6 @@ class RetosRepository {
       final resultSet = await queryJob;
 
       final elapsed = DateTime.now().difference(start);
-      // Reducido a 400ms para mayor fluidez
       if (elapsed < const Duration(milliseconds: 400)) {
         await Future.delayed(const Duration(milliseconds: 400) - elapsed);
       }
@@ -337,7 +319,6 @@ class RetosRepository {
             final difference = todayDate.difference(lastDate).inDays;
 
             if (difference > 1) {
-              // Ha faltado por lo menos 1 día
               if (isPro) {
                 final lastShieldStr = row['last_shield_used']?.toString();
                 DateTime? lastShield;
@@ -363,8 +344,6 @@ class RetosRepository {
                   final yesterday = todayDate.subtract(const Duration(days: 1));
                   final yesterdayStr =
                       "${yesterday.year}-${yesterday.month.toString().padLeft(2, '0')}-${yesterday.day.toString().padLeft(2, '0')}";
-                  final todayStr =
-                      "${todayDate.year}-${todayDate.month.toString().padLeft(2, '0')}-${todayDate.day.toString().padLeft(2, '0')}";
 
                   await _client.execute('''
                     UPDATE users SET 
@@ -467,6 +446,7 @@ class RetosRepository {
     bool usedHelp = false,
     String?
     knownAnswer, // Respuesta correcta pasada directamente (evita query en práctica)
+    bool isPractice = false,
   }) async {
     try {
       final String todayStr = DateTime.now().toIso8601String().substring(0, 10);
@@ -539,7 +519,7 @@ class RetosRepository {
             .replaceAll('`', '')
             .replaceAll('"', '')
             .replaceAll("'", "")
-            .replaceAll(RegExp(r'\s+'), '') // ELIMINA TODO ESPACIO
+            .replaceAll(RegExp(r'\s+'), '')
             .trim()
             .toLowerCase();
       }
@@ -557,12 +537,10 @@ class RetosRepository {
 
       bool isCorrect = (cleanUser == cleanCorrect);
 
-      // SI FALLA: Intento con Super Normalización (sin espacios) para código
       if (!isCorrect) {
         final snCorrect = superNormalize(correctAnswerRaw);
         final snUser = superNormalize(answer);
 
-        // Limpieza de punto final opcional también en SN
         final finalSNCorrect = snCorrect.endsWith('.')
             ? snCorrect.substring(0, snCorrect.length - 1)
             : snCorrect;
@@ -589,7 +567,6 @@ class RetosRepository {
       // 3. Calcular XP si es correcto
       int totalXpToGrant = 0;
       if (isCorrect) {
-        // Configuración de rangos según el modo (usamos isDaily definido al inicio)
         final int baseXP = isDaily ? 100 : 25;
         final int speedBonus = isDaily ? 95 : 23;
         final int precisionBonus = isDaily ? 95 : 24;
@@ -603,11 +580,9 @@ class RetosRepository {
             totalXpToGrant = (timeSeconds > 300) ? 0 : 10;
           }
         } else {
-          // Bono de Velocidad: < 45 segundos
           if (timeSeconds < 45) {
             totalXpToGrant += speedBonus;
           }
-          // Bono de Precisión: Éxito en el primer intento
           if (prevAttempts == 0) {
             totalXpToGrant += precisionBonus;
           }
@@ -617,8 +592,8 @@ class RetosRepository {
       // 4. Registrar en user_sessions (Unificado con XP)
       final sessionId = 'sess_${DateTime.now().millisecondsSinceEpoch}';
       await _client.execute('''
-        INSERT INTO user_sessions (id, user_id, challenge_id, time_taken_seconds, is_success, attempts, completed_at, completion_date, xp_earned)
-        VALUES ('$sessionId', '$userId', '$challengeId', $timeSeconds, ${isCorrect ? 1 : 0}, 1, CURRENT_TIMESTAMP, '$todayStr', $totalXpToGrant)
+        INSERT INTO user_sessions (id, user_id, challenge_id, time_taken_seconds, is_success, attempts, completed_at, completion_date, xp_earned, is_practice)
+        VALUES ('$sessionId', '$userId', '$challengeId', $timeSeconds, ${isCorrect ? 1 : 0}, 1, CURRENT_TIMESTAMP, '$todayStr', $totalXpToGrant, ${isPractice ? 1 : 0})
         ON CONFLICT(user_id, challenge_id) DO UPDATE SET 
           attempts = CASE 
             WHEN completion_date != '$todayStr' THEN 1 
@@ -636,7 +611,8 @@ class RetosRepository {
           END,
           xp_earned = xp_earned + $totalXpToGrant,
           completed_at = CURRENT_TIMESTAMP,
-          completion_date = '$todayStr'
+          completion_date = '$todayStr',
+          is_practice = ${isPractice ? 1 : 0}
       ''');
 
       if (isCorrect) {
@@ -668,7 +644,12 @@ class RetosRepository {
   }
 
   /// Marca un reto como abandonado (fallado permanentemente)
-  Future<void> abandonChallenge(String challengeId, String userId, int timeSeconds) async {
+  Future<void> abandonChallenge(
+    String challengeId,
+    String userId,
+    int timeSeconds, {
+    bool isPractice = false,
+  }) async {
     try {
       final String todayStr = DateTime.now().toIso8601String().substring(0, 10);
       final sessionId = 'sess_${DateTime.now().millisecondsSinceEpoch}';
@@ -680,16 +661,17 @@ class RetosRepository {
       ''');
 
       await _client.execute('''
-        INSERT INTO user_sessions (id, user_id, challenge_id, time_taken_seconds, is_success, attempts, completed_at, completion_date, xp_earned)
-        VALUES ('$sessionId', '$userId', '$challengeId', $timeSeconds, -1, 3, CURRENT_TIMESTAMP, '$todayStr', 0)
+        INSERT INTO user_sessions (id, user_id, challenge_id, time_taken_seconds, is_success, attempts, completed_at, completion_date, xp_earned, is_practice)
+        VALUES ('$sessionId', '$userId', '$challengeId', $timeSeconds, -1, 3, CURRENT_TIMESTAMP, '$todayStr', 0, ${isPractice ? 1 : 0})
         ON CONFLICT(user_id, challenge_id) DO UPDATE SET 
           attempts = 3,
           time_taken_seconds = $timeSeconds,
           is_success = -1,
           completed_at = CURRENT_TIMESTAMP,
-          completion_date = '$todayStr'
+          completion_date = '$todayStr',
+          is_practice = ${isPractice ? 1 : 0}
       ''');
-      
+
       // Al abandonar no se rompe la racha de inmediato aquí, porque la racha se rompe por inactividad diaria.
       // Pero sí actualizamos last_played_date para que cuente como que interactuó (aunque falló).
       await _client.execute('''
@@ -708,7 +690,6 @@ class RetosRepository {
     }
   }
 
-  /// Trae el ranking de usuarios basado únicamente en el XP ganado HOY (horario UTC del servidor)
   Future<List<Map<String, dynamic>>> getDailyRanking() async {
     try {
       final minWait = Future.delayed(const Duration(milliseconds: 400));
@@ -718,6 +699,7 @@ class RetosRepository {
         JOIN user_sessions us ON u.id = us.user_id 
         WHERE us.completion_date = '${DateTime.now().toIso8601String().substring(0, 10)}'
         GROUP BY u.id 
+        HAVING xp > 0
         ORDER BY xp DESC 
         LIMIT 20
       ''');
@@ -746,13 +728,12 @@ class RetosRepository {
     }
   }
 
-  /// Trae el ranking global de usuarios por XP
   Future<List<Map<String, dynamic>>> getGlobalRanking() async {
     try {
-      // Espera mínima profesional de 400ms
       final minWait = Future.delayed(const Duration(milliseconds: 400));
       final queryJob = _client.query('''
         SELECT id, username, name, xp, country, is_pro FROM users 
+        WHERE xp > 0
         ORDER BY xp DESC 
         LIMIT 20
       ''');
@@ -780,7 +761,6 @@ class RetosRepository {
     }
   }
 
-  /// Actualiza el username si han pasado al menos 7 días desde el último cambio
   Future<String?> updateUsername(String userId, String newUsername) async {
     try {
       final userSet = await _client.query(
@@ -811,7 +791,7 @@ class RetosRepository {
       await _client.execute(
         "UPDATE users SET username = '$safeUsername', last_username_update = '$now' WHERE id = '$userId'",
       );
-      return null; // Null significa éxito sin errores
+      return null;
     } catch (e) {
       print('Exception updateUsername: $e');
       return 'Error al actualizar el nombre de usuario.';
@@ -927,7 +907,7 @@ class RetosRepository {
         SELECT COUNT(*) as count FROM user_sessions 
         WHERE user_id = '$userId' 
           AND completion_date >= '$todayStr'
-          AND challenge_id NOT IN (SELECT challenge_id FROM daily_challenges WHERE display_date = '$todayStr')
+          AND is_practice = 1
       ''');
 
       final countVal = countSet.first['count'];
@@ -970,7 +950,7 @@ class RetosRepository {
             MIN(CASE WHEN is_success = 1 THEN time_taken_seconds END) as best_time
         FROM user_sessions us
         WHERE us.user_id = '$userId'
-        AND EXISTS (SELECT 1 FROM daily_challenges dc WHERE dc.challenge_id = us.challenge_id AND dc.display_date = us.completion_date)
+        AND us.is_practice = 0
       ''');
 
       if (resultSet.isEmpty) {
@@ -1019,6 +999,7 @@ class RetosRepository {
         WHERE technology = '$technology' 
           AND level = '$level'
           AND id NOT IN (SELECT challenge_id FROM user_sessions WHERE user_id = '$userId' AND is_success = 1)
+          AND id NOT IN (SELECT challenge_id FROM daily_challenges)
         ORDER BY RANDOM() LIMIT 1
       ''');
 
@@ -1057,7 +1038,7 @@ class RetosRepository {
       final a = aiGenerated['correct_answer'].toString().replaceAll("'", "''");
 
       await _client.execute('''
-        INSERT INTO challenges (id, title, question, code_snippet, correct_answer, technology, level, is_premium)
+        INSERT INTO challenges (id, title, question, code_snippet, correct_answer, technology, level, is_ai, creator_id)
         VALUES (
           '$newId', 
           '$t', 
@@ -1066,7 +1047,8 @@ class RetosRepository {
           '$a', 
           '$technology', 
           '$level', 
-          0
+          1,
+          '$userId'
         )
       ''');
 
@@ -1112,11 +1094,9 @@ class RetosRepository {
     try {
       String filterClause = "";
       if (onlyDaily == true) {
-        filterClause =
-            "AND EXISTS (SELECT 1 FROM daily_challenges dc WHERE dc.challenge_id = us.challenge_id AND dc.display_date = us.completion_date)";
+        filterClause = "AND is_practice = 0";
       } else if (onlyDaily == false) {
-        filterClause =
-            "AND NOT EXISTS (SELECT 1 FROM daily_challenges dc WHERE dc.challenge_id = us.challenge_id AND dc.display_date = us.completion_date)";
+        filterClause = "AND is_practice = 1";
       }
 
       final resultSet = await _client.query('''
@@ -1151,10 +1131,11 @@ class RetosRepository {
   }
 
   /// Inserta retos profesionales iniciales si la tabla de retos está vacía.
+  /// Los datos se cargan desde [seedChallengesData] en `core/data/seed_challenges.dart`.
   Future<void> _seedInitialChallenges() async {
     try {
       final countSet = await _client.query(
-        "SELECT COUNT(*) as total FROM challenges",
+        'SELECT COUNT(*) as total FROM challenges',
       );
 
       final total =
@@ -1163,137 +1144,29 @@ class RetosRepository {
 
       print('🌱 Sembrando retos profesionales iniciales...');
 
-      final seedChallenges = [
-        [
-          'seed_01',
-          'Python: Listas',
-          '¿Cómo se añade un elemento al final de una lista?',
-          'lista....(item)',
-          'append',
-          'Python',
-          'PRINCIPIANTE',
-          0,
-        ],
-        [
-          'seed_02',
-          'JS: Asincronía',
-          '¿Qué palabra acompaña a "async" para esperar una promesa?',
-          'async function x() { ... task(); }',
-          'await',
-          'JavaScript',
-          'INTERMEDIO',
-          0,
-        ],
-        [
-          'seed_03',
-          'SQL: Filtros',
-          '¿Qué cláusula se usa para filtrar resultados?',
-          'SELECT * FROM users ... id = 1;',
-          'WHERE',
-          'SQL',
-          'PRINCIPIANTE',
-          0,
-        ],
-        [
-          'seed_04',
-          'Dart: Inferencia',
-          '¿Qué palabra se usa para inferencia de tipo local?',
-          '... name = "Dev";',
-          'var',
-          'Dart',
-          'PRINCIPIANTE',
-          0,
-        ],
-        [
-          'seed_05',
-          'Flutter: Widgets',
-          '¿Cuál es el widget base para una app con Material Design?',
-          'class App extends ... { ... }',
-          'MaterialApp',
-          'Flutter',
-          'PRINCIPIANTE',
-          0,
-        ],
-        [
-          'seed_06',
-          'CSS: Flexbox',
-          'Propiedad para alinear items en el eje principal:',
-          'display: flex; ...: center;',
-          'justify-content',
-          'CSS',
-          'INTERMEDIO',
-          0,
-        ],
-        [
-          'seed_11',
-          'Docker: Imagen',
-          'Comando para construir una imagen desde un Dockerfile:',
-          'docker ... -t mi-app .',
-          'build',
-          'Docker',
-          'INTERMEDIO',
-          0,
-        ],
-        [
-          'seed_12',
-          'Git: Ramas',
-          'Comando para cambiar de rama:',
-          'git ... nueva-rama',
-          'checkout',
-          'Git',
-          'PRINCIPIANTE',
-          0,
-        ],
-        [
-          'seed_14',
-          'TypeScript: Tipos',
-          '¿Cómo se define un valor que puede ser de cualquier tipo?',
-          'let x: ... = 10;',
-          'any',
-          'TypeScript',
-          'INTERMEDIO',
-          0,
-        ],
-        [
-          'seed_16',
-          'Kotlin: Nulabilidad',
-          'Operador para llamada segura (safe call):',
-          'user...name',
-          '?.',
-          'Kotlin',
-          'INTERMEDIO',
-          0,
-        ],
-        [
-          'seed_18',
-          'Rust: Mutabilidad',
-          'Palabra para declarar una variable mutable:',
-          'let ... x = 5;',
-          'mut',
-          'Rust',
-          'AVANZADO',
-          0,
-        ],
-        [
-          'seed_20',
-          'Linux: Permisos',
-          'Comando para cambiar permisos de un archivo:',
-          '... 755 script.sh',
-          'chmod',
-          'Linux',
-          'AVANZADO',
-          0,
-        ],
-      ];
+      final values = seedChallengesData
+          .map((c) {
+            escape(String key) =>
+                (c[key]?.toString() ?? '').replaceAll("'", "''");
+            return "('${escape('id')}', '${escape('title')}', "
+                "'${escape('question')}', '${escape('code_snippet')}', "
+                "'${escape('correct_answer')}', '${escape('technology')}', "
+                "'${escape('level')}', 0, NULL)";
+          })
+          .join(',\n');
 
-      for (var c in seedChallenges) {
+      if (values.isNotEmpty) {
         await _client.execute('''
-          INSERT OR REPLACE INTO challenges (id, title, question, code_snippet, correct_answer, technology, level, is_premium)
-          VALUES ('${c[0]}', '${c[1]}', '${c[2]}', '${c[3]}', '${c[4]}', '${c[5]}', '${c[6]}', ${c[7]})
+          INSERT OR REPLACE INTO challenges
+            (id, title, question, code_snippet, correct_answer, technology, level, is_ai, creator_id)
+          VALUES $values
         ''');
       }
-      print('✅ Retos semilla cargados correctamente.');
-    } catch (e) {}
+
+      print('✅ ${seedChallengesData.length} retos semilla cargados en batch.');
+    } catch (e) {
+      print('❌ Error en _seedInitialChallenges: $e');
+    }
   }
 
   /// Obtiene el progreso de los últimos 7 días (para el calendario de racha)
@@ -1309,14 +1182,14 @@ class RetosRepository {
         FROM user_sessions 
         WHERE user_id = '$userId' 
         AND completion_date >= '$sevenDaysAgoStr'
-        AND EXISTS (SELECT 1 FROM daily_challenges dc WHERE dc.challenge_id = user_sessions.challenge_id AND dc.display_date = user_sessions.completion_date)
+        AND is_practice = 0
         GROUP BY completion_date
       ''');
 
       // Mapear resultados
       final Map<String, int> dateStatus = {
         for (var row in resultSet)
-          row['completion_date'].toString(): _toInt(row['status'])
+          row['completion_date'].toString(): _toInt(row['status']),
       };
 
       final List<int> progress = [];
@@ -1334,7 +1207,7 @@ class RetosRepository {
   }
 
   /// Limpia TODAS las tablas para iniciar en blanco. Úsalo con cuidado.
-  Future<void> _clearAllData() async {
+  Future<void> clearAllData() async {
     try {
       print(
         '⚠️ ADVERTENCIA: Vaciando registros de la base de datos de producción...',
