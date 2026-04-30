@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/repositories/retos_repository.dart';
 import '../../core/widgets/pro_paywall.dart';
 import '../../core/widgets/scanner_loading.dart';
+import '../../core/widgets/app_refresh_indicator.dart';
 
 class PracticaScreen extends ConsumerStatefulWidget {
   const PracticaScreen({super.key});
@@ -45,12 +46,24 @@ class _PracticaScreenState extends ConsumerState<PracticaScreen> {
     });
   }
 
+  Future<void> _handleRefresh() async {
+    ref.invalidate(technologiesProvider);
+    ref.invalidate(practiceSessionsProvider);
+    ref.invalidate(userProfileProvider);
+
+    await Future.wait([
+      ref.read(technologiesProvider.future),
+      ref.read(practiceSessionsProvider.future),
+      ref.read(userProfileProvider.future),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context) {
     final techAsync = ref.watch(technologiesProvider);
     final sessionsAsync = ref.watch(practiceSessionsProvider);
 
-    if (_isLoading || techAsync.isLoading || sessionsAsync.isLoading) {
+    if (_isLoading) {
       return const Scaffold(body: ScannerLoading());
     }
 
@@ -196,142 +209,147 @@ class _PracticaScreenState extends ConsumerState<PracticaScreen> {
       body: Stack(
         children: [
           Positioned.fill(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.only(
-                left: 16.0,
-                right: 16.0,
-                top: 16.0,
-                bottom: !isPro && (sessionsAsync.value?.length ?? 0) > 3
-                    ? 180.0
-                    : 16.0, // Espacio para el footer transparente
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Paywall Section (Oculta para PRO)
-                  if (!isPro)
-                    Card(
-                      elevation: 0,
-                      color: theme.colorScheme.primaryContainer.withOpacity(
-                        0.5,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                        side: BorderSide(
-                          color: theme.colorScheme.primary,
-                          width: 1,
+            child: AppRefreshIndicator(
+              onRefresh: _handleRefresh,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 16.0,
+                  right: 16.0,
+                  top: 16.0,
+                  bottom: !isPro && (sessionsAsync.value?.length ?? 0) > 3
+                      ? 180.0
+                      : 16.0, // Espacio para el footer transparente
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Paywall Section (Oculta para PRO)
+                    if (!isPro)
+                      Card(
+                        elevation: 0,
+                        color: theme.colorScheme.primaryContainer.withOpacity(
+                          0.5,
                         ),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(20.0),
-                        child: Column(
-                          children: [
-                            const Icon(
-                              Icons.star,
-                              color: Colors.amber,
-                              size: 48,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'Desbloquea +100 Retos Exclusivos',
-                              style: textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Prepárate para las entrevistas técnicas más exigentes. Suscríbete por Bs 20,99/mes o ahorra con el plan anual.',
-                              style: textTheme.bodyMedium,
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 16),
-                            FilledButton(
-                              style: FilledButton.styleFrom(
-                                backgroundColor: theme.colorScheme.primary,
-                                foregroundColor: theme.colorScheme.onPrimary,
-                              ),
-                              onPressed: () {
-                                _showPaywall(context);
-                              },
-                              child: const Text('Desbloquear PRO ahora'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  if (!isPro) const SizedBox(height: 32),
-
-                  // Available Technologies
-                  Text('Tecnologías', style: textTheme.titleLarge),
-                  const SizedBox(height: 16),
-
-                  techAsync.when(
-                    loading: () => const SizedBox.shrink(),
-                    error: (err, stack) =>
-                        Text('Error al cargar tecnologías: $err'),
-                    data: (techs) {
-                      if (techs.isEmpty) {
-                        return const Text('Nuevas tecnologías próximamente.');
-                      }
-                      return Wrap(
-                        spacing: 8,
-                        runSpacing: 12,
-                        children: techs
-                            .map(
-                              (tech) => _buildTechChip(
-                                context,
-                                tech,
-                                _getIconForTech(tech),
-                              ),
-                            )
-                            .toList(),
-                      );
-                    },
-                  ),
-
-                  const SizedBox(height: 32),
-                  // Session History
-                  Text('Historial de Sesiones', style: textTheme.titleLarge),
-                  const SizedBox(height: 16),
-                  sessionsAsync.when(
-                    loading: () => const SizedBox.shrink(),
-                    error: (err, stack) =>
-                        Text('Error al cargar historial: $err'),
-                    data: (sessions) {
-                      if (sessions.isEmpty) {
-                        return const Card(
-                          child: Padding(
-                            padding: EdgeInsets.all(16.0),
-                            child: Text(
-                              'Aún no tienes sesiones. ¡Empieza a practicar!',
-                              textAlign: TextAlign.center,
-                            ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          side: BorderSide(
+                            color: theme.colorScheme.primary,
+                            width: 1,
                           ),
-                        );
-                      }
-                      return ListView.separated(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: sessions.length,
-                        separatorBuilder: (context, index) =>
-                            const SizedBox(height: 12),
-                        itemBuilder: (context, index) {
-                          final session = sessions[index];
-                          final isLocked = !isPro && index >= 3;
-                          final sessionNumber = sessions.length - index;
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(20.0),
+                          child: Column(
+                            children: [
+                              const Icon(
+                                Icons.star,
+                                color: Colors.amber,
+                                size: 48,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Desbloquea +100 Retos Exclusivos',
+                                style: textTheme.titleLarge?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Prepárate para las entrevistas técnicas más exigentes. Suscríbete por Bs 20,99/mes o ahorra con el plan anual.',
+                                style: textTheme.bodyMedium,
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 16),
+                              FilledButton(
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: theme.colorScheme.primary,
+                                  foregroundColor: theme.colorScheme.onPrimary,
+                                ),
+                                onPressed: () {
+                                  _showPaywall(context);
+                                },
+                                child: const Text('Desbloquear PRO ahora'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    if (!isPro) const SizedBox(height: 32),
 
-                          return _buildHistoryCard(
-                            context,
-                            session,
-                            number: sessionNumber,
-                            isLocked: isLocked,
+                    // Available Technologies
+                    Text('Tecnologías', style: textTheme.titleLarge),
+                    const SizedBox(height: 16),
+
+                    techAsync.when(
+                      skipLoadingOnRefresh: true,
+                      loading: () => const SizedBox.shrink(),
+                      error: (err, stack) =>
+                          Text('Error al cargar tecnologías: $err'),
+                      data: (techs) {
+                        if (techs.isEmpty) {
+                          return const Text('Nuevas tecnologías próximamente.');
+                        }
+                        return Wrap(
+                          spacing: 8,
+                          runSpacing: 12,
+                          children: techs
+                              .map(
+                                (tech) => _buildTechChip(
+                                  context,
+                                  tech,
+                                  _getIconForTech(tech),
+                                ),
+                              )
+                              .toList(),
+                        );
+                      },
+                    ),
+
+                    const SizedBox(height: 32),
+                    // Session History
+                    Text('Historial de Sesiones', style: textTheme.titleLarge),
+                    const SizedBox(height: 16),
+                    sessionsAsync.when(
+                      skipLoadingOnRefresh: true,
+                      loading: () => const SizedBox.shrink(),
+                      error: (err, stack) =>
+                          Text('Error al cargar historial: $err'),
+                      data: (sessions) {
+                        if (sessions.isEmpty) {
+                          return const Card(
+                            child: Padding(
+                              padding: EdgeInsets.all(16.0),
+                              child: Text(
+                                'Aún no tienes sesiones. ¡Empieza a practicar!',
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
                           );
-                        },
-                      );
-                    },
-                  ),
-                ],
+                        }
+                        return ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: sessions.length,
+                          separatorBuilder: (context, index) =>
+                              const SizedBox(height: 12),
+                          itemBuilder: (context, index) {
+                            final session = sessions[index];
+                            final isLocked = !isPro && index >= 3;
+                            final sessionNumber = sessions.length - index;
+
+                            return _buildHistoryCard(
+                              context,
+                              session,
+                              number: sessionNumber,
+                              isLocked: isLocked,
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

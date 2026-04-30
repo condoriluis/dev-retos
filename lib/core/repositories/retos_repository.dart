@@ -179,7 +179,7 @@ class RetosRepository {
           "SELECT * FROM daily_challenges WHERE display_date = '$dateStr'",
         );
 
-        if (checkDaily.length < 3) {
+        if (checkDaily.isEmpty) {
           // Intentar obtener retos que el usuario ya completó este día para "reparar" la racha
           final completedOnDay = await _client.query('''
             SELECT challenge_id FROM user_sessions 
@@ -199,8 +199,8 @@ class RetosRepository {
           }
 
           // Rellenar con aleatorios si faltan hasta llegar a 3
-          if (toAdd.length + existingCids.length < 3) {
-            final needed = 3 - (toAdd.length + existingCids.length);
+          if (toAdd.length + existingCids.length < 1) {
+            final needed = 1 - (toAdd.length + existingCids.length);
             final randomChallenges = await _client.query(
               "SELECT id FROM challenges WHERE id NOT IN (${[...existingCids, ...toAdd].map((e) => "'$e'").join(',')}) ORDER BY RANDOM() LIMIT $needed",
             );
@@ -297,9 +297,9 @@ class RetosRepository {
       final start = DateTime.now();
       final queryJob = _client.query('''
         SELECT u.*,
-          COALESCE((SELECT COUNT(*) FROM user_sessions WHERE user_id = u.id AND challenge_id IN (SELECT challenge_id FROM daily_challenges)), 0) as total_played,
-          COALESCE((SELECT COUNT(*) FROM user_sessions WHERE user_id = u.id AND challenge_id IN (SELECT challenge_id FROM daily_challenges) AND is_success = 1), 0) as total_won,
-          COALESCE((SELECT MIN(time_taken_seconds) FROM user_sessions WHERE user_id = u.id AND challenge_id IN (SELECT challenge_id FROM daily_challenges) AND is_success = 1), 0) as best_time
+          COALESCE((SELECT COUNT(*) FROM user_sessions us WHERE us.user_id = u.id AND EXISTS (SELECT 1 FROM daily_challenges dc WHERE dc.challenge_id = us.challenge_id AND dc.display_date = us.completion_date)), 0) as total_played,
+          COALESCE((SELECT COUNT(*) FROM user_sessions us WHERE us.user_id = u.id AND EXISTS (SELECT 1 FROM daily_challenges dc WHERE dc.challenge_id = us.challenge_id AND dc.display_date = us.completion_date) AND us.is_success = 1), 0) as total_won,
+          COALESCE((SELECT MIN(us.time_taken_seconds) FROM user_sessions us WHERE us.user_id = u.id AND EXISTS (SELECT 1 FROM daily_challenges dc WHERE dc.challenge_id = us.challenge_id AND dc.display_date = us.completion_date) AND us.is_success = 1), 0) as best_time
         FROM users u 
         WHERE u.id = '$userId'
       ''');
@@ -926,9 +926,9 @@ class RetosRepository {
             COUNT(*) as total_played,
             COUNT(CASE WHEN is_success = 1 THEN 1 END) as total_won,
             MIN(CASE WHEN is_success = 1 THEN time_taken_seconds END) as best_time
-        FROM user_sessions 
-        WHERE user_id = '$userId'
-        AND challenge_id IN (SELECT challenge_id FROM daily_challenges)
+        FROM user_sessions us
+        WHERE us.user_id = '$userId'
+        AND EXISTS (SELECT 1 FROM daily_challenges dc WHERE dc.challenge_id = us.challenge_id AND dc.display_date = us.completion_date)
       ''');
 
       if (resultSet.isEmpty) {
@@ -1071,10 +1071,10 @@ class RetosRepository {
       String filterClause = "";
       if (onlyDaily == true) {
         filterClause =
-            "AND us.challenge_id IN (SELECT challenge_id FROM daily_challenges)";
+            "AND EXISTS (SELECT 1 FROM daily_challenges dc WHERE dc.challenge_id = us.challenge_id AND dc.display_date = us.completion_date)";
       } else if (onlyDaily == false) {
         filterClause =
-            "AND us.challenge_id NOT IN (SELECT challenge_id FROM daily_challenges)";
+            "AND NOT EXISTS (SELECT 1 FROM daily_challenges dc WHERE dc.challenge_id = us.challenge_id AND dc.display_date = us.completion_date)";
       }
 
       final resultSet = await _client.query('''
@@ -1268,7 +1268,7 @@ class RetosRepository {
         WHERE user_id = '$userId' 
         AND is_success = 1 
         AND completion_date >= '$sevenDaysAgoStr'
-        AND challenge_id IN (SELECT challenge_id FROM daily_challenges)
+        AND EXISTS (SELECT 1 FROM daily_challenges dc WHERE dc.challenge_id = user_sessions.challenge_id AND dc.display_date = user_sessions.completion_date)
         GROUP BY completion_date
       ''');
 

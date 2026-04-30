@@ -470,7 +470,7 @@ class _XPLineChart extends StatelessWidget {
             fitInsideHorizontally: true,
             tooltipMargin: 4,
             tooltipPadding: const EdgeInsets.symmetric(
-              horizontal: 4,
+              horizontal: 2,
               vertical: 2,
             ),
             getTooltipItems: (touchedSpots) {
@@ -506,8 +506,7 @@ class _XPLineChart extends StatelessWidget {
 
                 // Forzar formato L, M, M, J, V, S, D
                 String label = dayShort[0].toUpperCase();
-                if (label == 'X')
-                  label = 'M'; // Caso de Miércoles en algunos locales
+                if (label == 'X') label = 'M';
 
                 return Padding(
                   padding: const EdgeInsets.only(top: 10),
