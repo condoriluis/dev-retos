@@ -591,6 +591,12 @@ class RetosRepository {
 
       // 4. Registrar en user_sessions (Unificado con XP)
       final sessionId = 'sess_${DateTime.now().millisecondsSinceEpoch}';
+
+      await _client.execute('''
+        INSERT OR IGNORE INTO users (id, username, name, email, xp, current_streak, is_pro)
+        VALUES ('$userId', 'guest_${userId.substring(0, 8)}', 'Invitado', 'guest_$userId@devretos.com', 0, 0, 0)
+      ''');
+
       await _client.execute('''
         INSERT INTO user_sessions (id, user_id, challenge_id, time_taken_seconds, is_success, attempts, completed_at, completion_date, xp_earned, is_practice)
         VALUES ('$sessionId', '$userId', '$challengeId', $timeSeconds, ${isCorrect ? 1 : 0}, 1, CURRENT_TIMESTAMP, '$todayStr', $totalXpToGrant, ${isPractice ? 1 : 0})
@@ -643,7 +649,6 @@ class RetosRepository {
     }
   }
 
-  /// Marca un reto como abandonado (fallado permanentemente)
   Future<void> abandonChallenge(
     String challengeId,
     String userId,
@@ -654,7 +659,6 @@ class RetosRepository {
       final String todayStr = DateTime.now().toIso8601String().substring(0, 10);
       final sessionId = 'sess_${DateTime.now().millisecondsSinceEpoch}';
 
-      // Asegurar integridad del usuario
       await _client.execute('''
         INSERT OR IGNORE INTO users (id, username, name, email, xp, current_streak, is_pro)
         VALUES ('$userId', 'guest_${userId.substring(0, 8)}', 'Invitado', 'guest_$userId@devretos.com', 0, 0, 0)
@@ -672,8 +676,6 @@ class RetosRepository {
           is_practice = ${isPractice ? 1 : 0}
       ''');
 
-      // Al abandonar no se rompe la racha de inmediato aquí, porque la racha se rompe por inactividad diaria.
-      // Pero sí actualizamos last_played_date para que cuente como que interactuó (aunque falló).
       await _client.execute('''
         UPDATE users SET 
           last_played_date = CASE 
@@ -780,7 +782,6 @@ class RetosRepository {
         }
       }
 
-      // Check if username is already taken
       final safeUsername = newUsername.replaceAll("'", "''");
       final dupCheck = await _client.query(
         "SELECT id FROM users WHERE username = '$safeUsername' AND id != '$userId'",
@@ -798,7 +799,6 @@ class RetosRepository {
     }
   }
 
-  /// Verifica si un username está disponible (no lo usa nadie más)
   Future<bool> isUsernameAvailable(
     String username,
     String currentUserId,
@@ -816,7 +816,6 @@ class RetosRepository {
     }
   }
 
-  /// Actualiza el país del usuario en Turso
   Future<bool> updateCountry(String userId, String country) async {
     try {
       final safeCountry = country.replaceAll("'", "''");
@@ -831,26 +830,30 @@ class RetosRepository {
     }
   }
 
-  /// Obtiene la lista dinámica de tecnologías para la vista de práctica
   Future<List<String>> getTechnologies() async {
-    try {
-      final resultSet = await _client.query('''
-        SELECT DISTINCT technology FROM challenges WHERE technology IS NOT NULL
-      ''');
-
-      return resultSet.map((row) => row['technology'].toString()).toList();
-    } catch (e) {
-      print('Exception getTechnologies: $e');
-      return [];
-    }
+    return [
+      'Dart',
+      'Flutter',
+      'SQL',
+      'Python',
+      'JavaScript',
+      'PHP',
+      'Rust',
+      'Java',
+      'Kotlin',
+      'Swift',
+      'C++',
+      'Go',
+      'Linux',
+      'HTML',
+      'CSS',
+    ];
   }
 
-  /// Migra los datos de un usuario invitado a una cuenta real
   Future<void> migrateGuestData(String guestId, String realUserId) async {
     try {
       print('🔄 Migrando datos de $guestId a $realUserId...');
 
-      // 1. Obtener datos del invitado
       final guestData = await _client.query(
         "SELECT xp, current_streak FROM users WHERE id = '$guestId'",
       );
@@ -859,7 +862,6 @@ class RetosRepository {
         final guestXp = guestData.first['xp'] as int? ?? 0;
         final guestStreak = guestData.first['current_streak'] as int? ?? 0;
 
-        // 2. Actualizar el usuario real sumando XP y tomando la mejor racha
         await _client.execute('''
           UPDATE users SET 
             xp = xp + $guestXp,
@@ -869,13 +871,10 @@ class RetosRepository {
         print('✅ XP y Racha migrados.');
       }
 
-      // 3. Vincular todas las sesiones al nuevo usuario
       await _client.execute('''
         UPDATE user_sessions SET user_id = '$realUserId' WHERE user_id = '$guestId'
       ''');
       print('✅ Sesiones de reto vinculadas.');
-
-      // 4. Eliminar el registro del invitado
       await _client.execute("DELETE FROM users WHERE id = '$guestId'");
       print('✅ Registro de invitado eliminado.');
     } catch (e) {
@@ -884,13 +883,12 @@ class RetosRepository {
     }
   }
 
-  /// Evaluador Freemium: Decide si el usuario puede jugar un reto nuevo
   Future<bool> canUserPlayChallenge(String userId) async {
     try {
       final userSet = await _client.query(
         "SELECT is_pro, reward_tickets FROM users WHERE id = '$userId'",
       );
-      if (userSet.isEmpty) return true; // Usuario nuevo/invitado puede jugar
+      if (userSet.isEmpty) return true;
 
       final isPro = userSet.first['is_pro'] == 1;
       final ticketsVal = userSet.first['reward_tickets'];
@@ -898,10 +896,9 @@ class RetosRepository {
           ? ticketsVal.toInt()
           : (ticketsVal as int? ?? 0);
 
-      if (isPro) return true; // Acceso Total VIP
-      if (tickets > 0) return true; // Acceso temporal via Ad Recompensado
+      if (isPro) return true;
+      if (tickets > 0) return true;
 
-      // Límite de 3 Prácticas Diarias (Excluyendo Retos Diarios)
       final todayStr = DateTime.now().toIso8601String().substring(0, 10);
       final countSet = await _client.query('''
         SELECT COUNT(*) as count FROM user_sessions 
@@ -922,10 +919,8 @@ class RetosRepository {
     }
   }
 
-  /// Otorga Ticket AdMob tras anuncio validado
   Future<void> grantAdRewardTicket(String userId) async {
     try {
-      // Asegurar que el usuario exista (especialmente para invitados)
       await _client.execute('''
         INSERT OR IGNORE INTO users (id, username, name, email, xp, current_streak, is_pro)
         VALUES ('$userId', 'guest_${userId.length > 8 ? userId.substring(userId.length - 5) : "user"}', 'Invitado', 'guest_$userId@devretos.com', 0, 0, 0)
@@ -940,7 +935,6 @@ class RetosRepository {
     }
   }
 
-  /// Obtiene estadísticas reales de retos para el perfil (Exclusivo de Retos Diarios)
   Future<Map<String, dynamic>> getUserStats(String userId) async {
     try {
       final resultSet = await _client.query('''
@@ -990,10 +984,8 @@ class RetosRepository {
     AiChallengeService aiService,
   ) async {
     try {
-      // Espera mínima profesional de 400ms
       final minWait = Future.delayed(const Duration(milliseconds: 400));
 
-      // 1. Buscar en Turso un reto no completado exitosamente por este usuario
       final queryJob = _client.query('''
         SELECT * FROM challenges 
         WHERE technology = '$technology' 
@@ -1020,7 +1012,6 @@ class RetosRepository {
         };
       }
 
-      // 2. Miss (Fallo) - Generar con IA
       print(
         '⏳ Reto de $technology - $level no encontrado. Solicitando a las APIs de IA...',
       );
@@ -1028,10 +1019,8 @@ class RetosRepository {
 
       if (aiGenerated == null) return null;
 
-      // 3. Guardar en Turso (El toque maestro para poblar gratuitamente)
       final newId = 'c_${DateTime.now().millisecondsSinceEpoch}';
 
-      // Sanitizar contenido JSON retornado por la IA para evitar inyección SQLite básica en el insert local:
       final t = aiGenerated['title'].toString().replaceAll("'", "''");
       final q = aiGenerated['question'].toString().replaceAll("'", "''");
       final c = aiGenerated['code_snippet'].toString().replaceAll("'", "''");
@@ -1069,7 +1058,6 @@ class RetosRepository {
     }
   }
 
-  /// Obtiene la respuesta correcta de un reto (Solo llamar tras ver anuncio)
   Future<String?> getCorrectAnswer(String challengeId) async {
     try {
       final resultSet = await _client.query(
@@ -1085,7 +1073,6 @@ class RetosRepository {
     }
   }
 
-  /// Obtiene el historial de sesiones del usuario, opcionalmente filtrado por tipo
   Future<List<Map<String, dynamic>>> getUserSessions(
     String userId, {
     bool? onlyDaily,
@@ -1130,8 +1117,6 @@ class RetosRepository {
     }
   }
 
-  /// Inserta retos profesionales iniciales si la tabla de retos está vacía.
-  /// Los datos se cargan desde [seedChallengesData] en `core/data/seed_challenges.dart`.
   Future<void> _seedInitialChallenges() async {
     try {
       final countSet = await _client.query(
@@ -1176,7 +1161,6 @@ class RetosRepository {
       final sevenDaysAgo = now.subtract(const Duration(days: 7));
       final sevenDaysAgoStr = sevenDaysAgo.toIso8601String().substring(0, 10);
 
-      // Una sola consulta para toda la semana
       final resultSet = await _client.query('''
         SELECT completion_date, MAX(is_success) as status
         FROM user_sessions 
@@ -1186,7 +1170,6 @@ class RetosRepository {
         GROUP BY completion_date
       ''');
 
-      // Mapear resultados
       final Map<String, int> dateStatus = {
         for (var row in resultSet)
           row['completion_date'].toString(): _toInt(row['status']),

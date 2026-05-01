@@ -19,6 +19,8 @@ import '../../core/services/security_service.dart';
 import '../../core/widgets/incorrect_answer_dialog.dart';
 import '../../core/widgets/solution_revealed_dialog.dart';
 
+import '../../core/widgets/challenge_error_dialog.dart';
+
 class SolvingScreen extends ConsumerStatefulWidget {
   final String technology;
   final String level;
@@ -136,12 +138,10 @@ class _SolvingScreenState extends ConsumerState<SolvingScreen>
 
     if (mounted) {
       if (result == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Límites de IA excedidos o red sin respuesta.'),
-          ),
+        ChallengeErrorDialog.show(
+          context,
+          'No pudimos generar el reto en este momento. Por favor, verifica tu conexión o intenta con otra tecnología.',
         );
-        Navigator.pop(context);
       } else {
         setState(() {
           _challenge = result;
@@ -885,9 +885,7 @@ class _SolvingScreenState extends ConsumerState<SolvingScreen>
           SolutionRevealedDialog.show(context);
         }
       },
-      onAdClosed: () {
-        // No necesitamos hacer nada especial al cerrar
-      },
+      onAdClosed: () {},
     );
 
     if (!wasShown && mounted) {
@@ -921,6 +919,168 @@ class _SolvingScreenState extends ConsumerState<SolvingScreen>
       });
       SolutionRevealedDialog.show(context);
     }
+  }
+
+  Future<void> _abandonChallenge() async {
+    if (_challenge == null) return;
+
+    final container = ProviderScope.containerOf(context, listen: false);
+    final user = ref.read(currentUserProvider);
+    final guestId = ref.read(guestIdProvider);
+    final userId = user?.id ?? guestId;
+    final String challengeId = _challenge!['id'];
+    final repo = ref.read(retosRepositoryProvider);
+    final int timeTaken = _getElapsedTime();
+
+    Navigator.of(context).pop();
+
+    _uiTimer?.cancel();
+    _clearTimer();
+    try {
+      await repo.abandonChallenge(
+        challengeId,
+        userId,
+        timeTaken,
+        isPractice: true,
+      );
+
+      container.invalidate(userProfileProvider);
+      container.invalidate(userStatsProvider);
+      container.invalidate(userSessionsProvider);
+      container.invalidate(practiceSessionsProvider);
+      container.invalidate(weeklyProgressProvider);
+      container.invalidate(globalRankingProvider);
+      container.invalidate(dailyRankingProvider);
+    } catch (e) {
+      debugPrint('Error silent abandon: $e');
+    }
+  }
+
+  Future<bool> _showAbandonConfirmationDialog() async {
+    final bool? result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      barrierColor: Colors.black.withOpacity(0.8),
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color.alphaBlend(
+                    theme.colorScheme.primary.withOpacity(0.08),
+                    theme.colorScheme.surface,
+                  ),
+                  Color.alphaBlend(
+                    theme.colorScheme.primary.withOpacity(0.18),
+                    theme.colorScheme.surface,
+                  ),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(
+                color: theme.colorScheme.primary.withOpacity(0.2),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 15,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.warning_rounded,
+                    color: Colors.orange,
+                    size: 40,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  '¿Abandonar práctica?',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Si sales ahora, esta práctica se marcará como abandonada.',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 32),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        child: Text(
+                          'ME QUEDO',
+                          style: TextStyle(
+                            color: theme.colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.1,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: () {
+                          Navigator.pop(ctx, true);
+                          _abandonChallenge();
+                        },
+                        style: FilledButton.styleFrom(
+                          backgroundColor: theme.colorScheme.error,
+                          foregroundColor: theme.colorScheme.onError,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          'ABANDONAR',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.1,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    return result ?? false;
   }
 
   @override
@@ -1132,7 +1292,6 @@ class _SolvingScreenState extends ConsumerState<SolvingScreen>
         body: _buildSuccessView(theme, textTheme, isPro),
       );
     }
-
     if (_isFailure) {
       return Scaffold(
         appBar: AppBar(
@@ -1143,320 +1302,342 @@ class _SolvingScreenState extends ConsumerState<SolvingScreen>
       );
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Reto ${widget.technology}'),
-        actions: [
-          IconButton(
-            onPressed: _confirmShowSolution,
-            icon: Icon(
-              _isSolutionVisible ? Icons.lightbulb : Icons.lightbulb_outline,
-              color: _isSolutionVisible
-                  ? Colors.amber
-                  : Colors.amber.withOpacity(0.6),
+    bool isSolvingActive =
+        _challenge != null && !_isSuccess && !_isFailure && !_isLoading;
+
+    return PopScope(
+      canPop: !isSolvingActive,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        await _showAbandonConfirmationDialog();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text('Reto ${widget.technology}'),
+          actions: [
+            IconButton(
+              onPressed: _confirmShowSolution,
+              icon: Icon(
+                _isSolutionVisible ? Icons.lightbulb : Icons.lightbulb_outline,
+                color: _isSolutionVisible
+                    ? Colors.amber
+                    : Colors.amber.withOpacity(0.6),
+              ),
+              tooltip: 'Ver solución',
             ),
-            tooltip: 'Ver solución',
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'PRÁCTICA',
-                        style: textTheme.labelLarge?.copyWith(
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 1.5,
-                          color: theme.colorScheme.primary.withOpacity(0.7),
+          ],
+        ),
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'PRÁCTICA',
+                          style: textTheme.labelLarge?.copyWith(
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.5,
+                            color: theme.colorScheme.primary.withOpacity(0.7),
+                          ),
                         ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.timer_outlined,
+                                size: 14,
+                                color: Colors.greenAccent,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                _getFormattedTime(),
+                                style: const TextStyle(
+                                  fontFamily: 'monospace',
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.timer_outlined,
-                              size: 14,
-                              color: Colors.greenAccent,
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    // Fila: Intentos Restantes + Nivel
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
                             ),
-                            const SizedBox(width: 6),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primary.withOpacity(
+                                0.15,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: theme.colorScheme.primary.withOpacity(
+                                  0.5,
+                                ),
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'INTENTOS',
+                                  style: textTheme.labelSmall?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                    fontSize: 10,
+                                    letterSpacing: 1.1,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                if (isPro)
+                                  Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.all_inclusive,
+                                        color: Colors.amber,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'ILIMITADOS',
+                                        style: TextStyle(
+                                          color: Colors.amber.withOpacity(0.9),
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                else
+                                  Row(
+                                    children: List.generate(_maxAttempts, (
+                                      index,
+                                    ) {
+                                      final remaining =
+                                          _maxAttempts - _attempts;
+                                      final isFilled = index < remaining;
+                                      return Padding(
+                                        padding: const EdgeInsets.only(
+                                          right: 6,
+                                        ),
+                                        child: Container(
+                                          width: 18,
+                                          height: 18,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: isFilled
+                                                ? theme.colorScheme.primary
+                                                : Colors.transparent,
+                                            border: Border.all(
+                                              color: theme.colorScheme.primary
+                                                  .withOpacity(
+                                                    isFilled ? 1.0 : 0.3,
+                                                  ),
+                                              width: 1.5,
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    }),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        // Card NIVEL
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.secondary.withOpacity(
+                                0.15,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: theme.colorScheme.secondary.withOpacity(
+                                  0.5,
+                                ),
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'NIVEL',
+                                  style: textTheme.labelSmall?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                    fontSize: 10,
+                                    letterSpacing: 1.1,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  _challenge!['level'] ?? '',
+                                  style: textTheme.labelLarge?.copyWith(
+                                    color: theme.colorScheme.secondary,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      _challenge!['title'],
+                      style: textTheme.titleMedium,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      _challenge!['question'],
+                      style: textTheme.titleLarge,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+
+                    CodeViewer(
+                      code: _challenge!['code_snippet'] ?? '',
+                      technology: widget.technology,
+                    ),
+                    if (_isSolutionVisible) ...[
+                      const SizedBox(height: 16),
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 500),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Colors.amber.withOpacity(0.5),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(
+                                  Icons.lightbulb,
+                                  color: Colors.amber,
+                                  size: 20,
+                                ),
+                                SizedBox(width: 8),
+                                Text(
+                                  'SOLUCIÓN REVELADA',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.amber,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
                             Text(
-                              _getFormattedTime(),
+                              _correctAnswer,
                               style: const TextStyle(
-                                fontFamily: 'monospace',
+                                fontSize: 16,
                                 fontWeight: FontWeight.bold,
-                                fontSize: 14,
+                                fontFamily: 'monospace',
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              'Nota: Ganarás XP reducido tras usar la ayuda.',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.grey,
                               ),
                             ),
                           ],
                         ),
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 10),
-                  // Fila: Intentos Restantes + Nivel
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.primary.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: theme.colorScheme.primary.withOpacity(0.5),
-                            ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'INTENTOS',
-                                style: textTheme.labelSmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                  fontSize: 10,
-                                  letterSpacing: 1.1,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              if (isPro)
-                                Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.all_inclusive,
-                                      color: Colors.amber,
-                                      size: 20,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'ILIMITADOS',
-                                      style: TextStyle(
-                                        color: Colors.amber.withOpacity(0.9),
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              else
-                                Row(
-                                  children: List.generate(_maxAttempts, (
-                                    index,
-                                  ) {
-                                    final remaining = _maxAttempts - _attempts;
-                                    final isFilled = index < remaining;
-                                    return Padding(
-                                      padding: const EdgeInsets.only(right: 6),
-                                      child: Container(
-                                        width: 18,
-                                        height: 18,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: isFilled
-                                              ? theme.colorScheme.primary
-                                              : Colors.transparent,
-                                          border: Border.all(
-                                            color: theme.colorScheme.primary
-                                                .withOpacity(
-                                                  isFilled ? 1.0 : 0.3,
-                                                ),
-                                            width: 1.5,
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  }),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      // Card NIVEL
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.secondary.withOpacity(
-                              0.15,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: theme.colorScheme.secondary.withOpacity(
-                                0.5,
-                              ),
-                            ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'NIVEL',
-                                style: textTheme.labelSmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                  fontSize: 10,
-                                  letterSpacing: 1.1,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                _challenge!['level'] ?? '',
-                                style: textTheme.labelLarge?.copyWith(
-                                  color: theme.colorScheme.secondary,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    _challenge!['title'],
-                    style: textTheme.titleMedium,
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    _challenge!['question'],
-                    style: textTheme.titleLarge,
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 16),
+                    const SizedBox(height: 24),
 
-                  CodeViewer(
-                    code: _challenge!['code_snippet'] ?? '',
-                    technology: widget.technology,
-                  ),
-                  if (_isSolutionVisible) ...[
-                    const SizedBox(height: 16),
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 500),
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.amber.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Colors.amber.withOpacity(0.5),
+                    TextField(
+                      controller: _answerController,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      decoration: InputDecoration(
+                        hintText: 'Escribe tu respuesta aqui . ...',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
                         ),
+                        filled: true,
+                        fillColor: theme.colorScheme.surfaceContainerHighest,
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Row(
-                            children: [
-                              Icon(
-                                Icons.lightbulb,
-                                color: Colors.amber,
-                                size: 20,
+                    ),
+                    const SizedBox(height: 24),
+                    ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: _answerController,
+                      builder: (context, value, child) {
+                        final bool isEmpty = value.text.trim().isEmpty;
+                        return SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            onPressed: (_isSubmitting || isEmpty)
+                                ? null
+                                : _submitAnswer,
+                            style: FilledButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
                               ),
-                              SizedBox(width: 8),
-                              Text(
-                                'SOLUCIÓN REVELADA',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.amber,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            _correctAnswer,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              fontFamily: 'monospace',
                             ),
+                            child: _isSubmitting
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Text(
+                                    'ENVIAR',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                           ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            'Nota: Ganarás XP reducido tras usar la ayuda.',
-                            style: TextStyle(fontSize: 10, color: Colors.grey),
-                          ),
-                        ],
-                      ),
+                        );
+                      },
                     ),
                   ],
-                  const SizedBox(height: 24),
-
-                  TextField(
-                    controller: _answerController,
-                    autocorrect: false,
-                    enableSuggestions: false,
-                    decoration: InputDecoration(
-                      hintText: 'Escribe tu respuesta aqui . ...',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      filled: true,
-                      fillColor: theme.colorScheme.surfaceContainerHighest,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  ValueListenableBuilder<TextEditingValue>(
-                    valueListenable: _answerController,
-                    builder: (context, value, child) {
-                      final bool isEmpty = value.text.trim().isEmpty;
-                      return SizedBox(
-                        width: double.infinity,
-                        child: FilledButton(
-                          onPressed: (_isSubmitting || isEmpty)
-                              ? null
-                              : _submitAnswer,
-                          style: FilledButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: _isSubmitting
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Text(
-                                  'ENVIAR',
-                                  style: TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                        ),
-                      );
-                    },
-                  ),
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

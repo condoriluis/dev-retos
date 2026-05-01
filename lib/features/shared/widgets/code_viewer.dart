@@ -25,11 +25,9 @@ class _CodeViewerState extends State<CodeViewer> {
     if (_fontSize > _minFontSize) setState(() => _fontSize -= 2.0);
   }
 
-  /// Mapea el nombre de tecnología al lenguaje que entiende highlight.js
   String _getLanguage(String tech) {
     final t = tech.toLowerCase();
     if (t.contains('javascript') || t.contains('js')) return 'javascript';
-    if (t.contains('typescript') || t.contains('ts')) return 'typescript';
     if (t.contains('python')) return 'python';
     if (t.contains('dart') || t.contains('flutter')) return 'dart';
     if (t.contains('java') && !t.contains('javascript')) return 'java';
@@ -38,11 +36,13 @@ class _CodeViewerState extends State<CodeViewer> {
     if (t.contains('php')) return 'php';
     if (t.contains('c++') || t.contains('cpp')) return 'cpp';
     if (t.contains('go')) return 'go';
-    if (t.contains('react') || t.contains('jsx')) return 'javascript';
+    if (t.contains('rust')) return 'rust';
     if (t.contains('html')) return 'html';
     if (t.contains('css')) return 'css';
-    if (t.contains('sql') || t.contains('database')) return 'sql';
-    if (t.contains('rust')) return 'rust';
+    if (t.contains('sql')) return 'sql';
+    if (t.contains('linux') || t.contains('bash') || t.contains('shell')) {
+      return 'bash';
+    }
     return 'plaintext';
   }
 
@@ -54,7 +54,7 @@ class _CodeViewerState extends State<CodeViewer> {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1B26), // Fondo noche tipo Tokyo Night
+        color: const Color(0xFF1A1B26),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: theme.colorScheme.outlineVariant.withOpacity(0.4),
@@ -70,7 +70,6 @@ class _CodeViewerState extends State<CodeViewer> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ── Header del editor ──
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: const BoxDecoration(
@@ -80,7 +79,6 @@ class _CodeViewerState extends State<CodeViewer> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Semáforo estilo macOS + lenguaje
                 Row(
                   children: [
                     _dot(const Color(0xFFFF5F56)),
@@ -107,7 +105,6 @@ class _CodeViewerState extends State<CodeViewer> {
                     ),
                   ],
                 ),
-                // Controles de zoom
                 Row(
                   children: [
                     _buildZoomButton(
@@ -144,7 +141,6 @@ class _CodeViewerState extends State<CodeViewer> {
             ),
           ),
 
-          // ── Cuerpo con snippet resaltado ──
           ClipRRect(
             borderRadius: const BorderRadius.vertical(
               bottom: Radius.circular(16),

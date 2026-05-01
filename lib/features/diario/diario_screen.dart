@@ -973,7 +973,6 @@ class _DiarioScreenState extends ConsumerState<DiarioScreen>
     if (result.isCorrect) {
       _sessionStopwatch.stop();
 
-      // Limpiar persistencia local
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('challenge_start_$challengeId');
 
@@ -997,8 +996,7 @@ class _DiarioScreenState extends ConsumerState<DiarioScreen>
               )
               .value ??
           0;
-      final remaining =
-          3 - (currentAttempts + 1); // +1 porque el repo ya contó el actual
+      final remaining = 3 - (currentAttempts + 1);
 
       if (remaining <= 0) {
         _sessionStopwatch.stop();
@@ -1022,81 +1020,127 @@ class _DiarioScreenState extends ConsumerState<DiarioScreen>
 
     if (userId == null) return;
 
-    setState(() => _isSubmitting = true);
-    _sessionStopwatch.stop();
-
-    final elapsedSeconds = _sessionStopwatch.elapsed.inSeconds;
+    final container = ProviderScope.containerOf(context, listen: false);
     final repo = ref.read(retosRepositoryProvider);
-
-    await repo.abandonChallenge(challengeId, userId, elapsedSeconds);
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('challenge_start_$challengeId');
-
-    if (!mounted) return;
-    setState(() => _isSubmitting = false);
-
-    ref.invalidate(userProfileProvider);
-    ref.invalidate(userStatsProvider);
-    ref.invalidate(userSessionsProvider);
-    ref.invalidate(dailySessionsProvider);
-    ref.invalidate(weeklyProgressProvider);
-    ref.invalidate(globalRankingProvider);
-    ref.invalidate(dailyRankingProvider);
-    ref.invalidate(
-      attemptsProvider((challengeId: challengeId, userId: userId)),
-    );
-    ref.invalidate(dailyChallengesProvider);
+    _sessionStopwatch.stop();
+    final elapsedSeconds = _sessionStopwatch.elapsed.inSeconds;
+    setState(() {
+      _isChallengeStarted = false;
+    });
+    _sessionStopwatch.reset();
     _answerController.clear();
+
+    try {
+      await repo.abandonChallenge(challengeId, userId, elapsedSeconds);
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('challenge_start_$challengeId');
+
+      container.invalidate(userProfileProvider);
+      container.invalidate(userStatsProvider);
+      container.invalidate(userSessionsProvider);
+      container.invalidate(dailySessionsProvider);
+      container.invalidate(weeklyProgressProvider);
+      container.invalidate(globalRankingProvider);
+      container.invalidate(dailyRankingProvider);
+      container.invalidate(
+        attemptsProvider((challengeId: challengeId, userId: userId)),
+      );
+      container.invalidate(dailyChallengesProvider);
+    } catch (e) {
+      debugPrint('Error silent abandon (diario): $e');
+    }
   }
 
   Future<bool> _showAbandonConfirmationDialog(String? challengeId) async {
     final bool? result = await showDialog<bool>(
       context: context,
+      barrierDismissible: true,
       builder: (ctx) {
         final theme = Theme.of(ctx);
         return Dialog(
           backgroundColor: Colors.transparent,
+          elevation: 0,
           child: Container(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: theme.colorScheme.outlineVariant.withOpacity(0.5),
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color.alphaBlend(
+                    theme.colorScheme.primary.withOpacity(0.08),
+                    theme.colorScheme.surface,
+                  ),
+                  Color.alphaBlend(
+                    theme.colorScheme.primary.withOpacity(0.18),
+                    theme.colorScheme.surface,
+                  ),
+                ],
               ),
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(
+                color: theme.colorScheme.primary.withOpacity(0.2),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 15,
+                  offset: const Offset(0, 8),
+                ),
+              ],
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
-                  Icons.warning_rounded,
-                  color: Colors.orange,
-                  size: 48,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  '¿Estás seguro de abandonar?',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.warning_rounded,
+                    color: Colors.orange,
+                    size: 40,
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 20),
                 Text(
-                  'Si sales ahora, el reto se marcará como fallado y perderás la oportunidad de ganarlo hoy.',
+                  '¿Abandonar reto?',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Si abandonas ahora, el reto se marcará como fallido y podrías perder tu racha de días.',
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
+                    height: 1.5,
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 32),
                 Row(
                   children: [
                     Expanded(
                       child: TextButton(
                         onPressed: () => Navigator.pop(ctx, false),
-                        child: const Text('ME QUEDO'),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        child: Text(
+                          'ME QUEDO',
+                          style: TextStyle(
+                            color: theme.colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.1,
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -1109,10 +1153,19 @@ class _DiarioScreenState extends ConsumerState<DiarioScreen>
                           Navigator.pop(ctx, true);
                         },
                         style: FilledButton.styleFrom(
-                          backgroundColor: theme.colorScheme.error,
-                          foregroundColor: theme.colorScheme.onError,
+                          backgroundColor: theme.colorScheme.primary,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
-                        child: const Text('ABANDONAR'),
+                        child: const Text(
+                          'ABANDONAR',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.1,
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -1350,8 +1403,9 @@ class _DiarioScreenState extends ConsumerState<DiarioScreen>
           currentChallengeId,
         );
         if (shouldPop && mounted) {
-          // Si usan GoRouter, GoRouter escucha el pop internamente, pero por si acaso
-          Navigator.of(context).pop();
+          // En el diario, el reto es una vista interna, no una pantalla aparte.
+          // Por lo tanto, no hacemos pop del Navigator, sino que reseteamos el estado local.
+          setState(() => _isChallengeStarted = false);
         }
       },
       child: Scaffold(
@@ -2064,92 +2118,70 @@ class _DiarioScreenState extends ConsumerState<DiarioScreen>
                   child: Column(
                     children: [
                       if (isAbandoned)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 16.0),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                        () {
+                          final count = challengeData['attempts'] ?? 0;
+                          final timeTaken = challengeData['time_taken'] ?? 0;
+                          final m = (timeTaken / 60).floor().toString().padLeft(
+                            2,
+                            '0',
+                          );
+                          final s = (timeTaken % 60).toString().padLeft(2, '0');
+                          return Column(
                             children: [
-                              Icon(
-                                Icons.cancel_rounded,
-                                color: theme.colorScheme.error,
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildMinimalStat(
+                                      'TU TIEMPO',
+                                      "$m:$s",
+                                      Icons.timer_outlined,
+                                      isAbandoned ? Colors.grey : Colors.blue,
+                                    ),
+                                  ),
+                                  Container(
+                                    height: 40,
+                                    width: 1,
+                                    color: Colors.white10,
+                                  ),
+                                  Expanded(
+                                    child: _buildMinimalStat(
+                                      'INTENTOS USADOS',
+                                      '$count',
+                                      isAbandoned
+                                          ? Icons.cancel_outlined
+                                          : Icons.check_circle_outline,
+                                      isAbandoned
+                                          ? theme.colorScheme.error
+                                          : Colors.green,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'RETO NO SUPERADO',
-                                style: TextStyle(
-                                  color: theme.colorScheme.error,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1.5,
-                                ),
+                              const SizedBox(height: 18),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: List.generate(count, (index) {
+                                  final isLast = index == count - 1;
+                                  return Container(
+                                    width: 20,
+                                    height: 20,
+                                    margin: const EdgeInsets.symmetric(
+                                      horizontal: 2.5,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: isLast
+                                          ? (isAbandoned
+                                                ? Colors.white24
+                                                : Colors.green)
+                                          : Colors.white24,
+                                      borderRadius: BorderRadius.circular(3),
+                                    ),
+                                  );
+                                }),
                               ),
                             ],
-                          ),
-                        ),
-                      () {
-                        final count = challengeData['attempts'] ?? 0;
-                        final timeTaken = challengeData['time_taken'] ?? 0;
-                        final m = (timeTaken / 60).floor().toString().padLeft(
-                          2,
-                          '0',
-                        );
-                        final s = (timeTaken % 60).toString().padLeft(2, '0');
-                        return Column(
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _buildMinimalStat(
-                                    'TU TIEMPO',
-                                    "$m:$s",
-                                    Icons.timer_outlined,
-                                    isAbandoned ? Colors.grey : Colors.blue,
-                                  ),
-                                ),
-                                Container(
-                                  height: 40,
-                                  width: 1,
-                                  color: Colors.white10,
-                                ),
-                                Expanded(
-                                  child: _buildMinimalStat(
-                                    'INTENTOS USADOS',
-                                    '$count',
-                                    isAbandoned
-                                        ? Icons.cancel_outlined
-                                        : Icons.check_circle_outline,
-                                    isAbandoned
-                                        ? theme.colorScheme.error
-                                        : Colors.green,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 18),
-                            // Cuadrados de intentos en una nueva fila
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: List.generate(count, (index) {
-                                final isLast = index == count - 1;
-                                return Container(
-                                  width: 20,
-                                  height: 20,
-                                  margin: const EdgeInsets.symmetric(
-                                    horizontal: 2.5,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: isLast
-                                        ? (isAbandoned
-                                              ? theme.colorScheme.error
-                                              : Colors.green)
-                                        : Colors.white24,
-                                    borderRadius: BorderRadius.circular(3),
-                                  ),
-                                );
-                              }),
-                            ),
-                          ],
-                        );
-                      }(),
+                          );
+                        }(),
                       const SizedBox(height: 10),
                       Container(
                         padding: const EdgeInsets.symmetric(

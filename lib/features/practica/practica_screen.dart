@@ -537,8 +537,16 @@ class _PracticaScreenState extends ConsumerState<PracticaScreen> {
                 context,
                 technology,
                 'ADVANCED',
-                'Senior / Expert',
+                'Senior',
                 Icons.rocket_launch_rounded,
+              ),
+              const SizedBox(height: 12),
+              _buildDifficultyButton(
+                context,
+                technology,
+                'EXPERT',
+                'Expert / Guru',
+                Icons.workspace_premium_rounded,
               ),
               const SizedBox(height: 12),
             ],
@@ -599,7 +607,9 @@ class _PracticaScreenState extends ConsumerState<PracticaScreen> {
   }) {
     final theme = Theme.of(context);
     final tech = session['technology'] ?? 'Otro';
-    final isSuccess = session['is_success'] == 1;
+    final int successStatus = session['is_success'] ?? 0;
+    final isSuccess = successStatus == 1;
+    final isAbandoned = successStatus == -1;
     final attempts = session['attempts'] ?? 1;
 
     // Formatear Fecha
@@ -621,7 +631,9 @@ class _PracticaScreenState extends ConsumerState<PracticaScreen> {
         color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: theme.colorScheme.outlineVariant.withOpacity(0.4),
+          color: isAbandoned
+              ? Colors.orange.withOpacity(0.3)
+              : theme.colorScheme.outlineVariant.withOpacity(0.4),
         ),
       ),
       child: ImageFiltered(
@@ -637,13 +649,17 @@ class _PracticaScreenState extends ConsumerState<PracticaScreen> {
                 height: 36,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withOpacity(0.1),
+                  color: isAbandoned
+                      ? Colors.orange.withOpacity(0.1)
+                      : theme.colorScheme.primary.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
                   '#$number',
                   style: TextStyle(
-                    color: theme.colorScheme.primary,
+                    color: isAbandoned
+                        ? Colors.orange
+                        : theme.colorScheme.primary,
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
                   ),
@@ -660,6 +676,7 @@ class _PracticaScreenState extends ConsumerState<PracticaScreen> {
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.bold,
+                        color: isAbandoned ? Colors.orange.shade200 : null,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -677,64 +694,100 @@ class _PracticaScreenState extends ConsumerState<PracticaScreen> {
                         ),
                         const SizedBox(width: 8),
                         Flexible(
-                          child: attempts > 3
+                          child: isAbandoned
                               ? Container(
                                   padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
+                                    horizontal: 8,
                                     vertical: 2,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: theme.colorScheme.primary
-                                        .withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(4),
+                                    color: Colors.orange.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(6),
                                     border: Border.all(
-                                      color: theme.colorScheme.primary
-                                          .withOpacity(0.3),
+                                      color: Colors.orange.withOpacity(0.3),
                                     ),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(
-                                        isSuccess
-                                            ? Icons.check_circle
-                                            : Icons.cancel,
-                                        size: 10,
-                                        color: isSuccess
-                                            ? Colors.green
-                                            : Colors.red,
-                                      ),
-                                      const SizedBox(width: 4),
                                       Text(
-                                        '$attempts Intentos',
+                                        'ABANDONADO',
                                         style: theme.textTheme.labelSmall
                                             ?.copyWith(
-                                              color: theme.colorScheme.primary,
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
+                                              color: Colors.orange,
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.w900,
+                                              letterSpacing: 0.5,
                                             ),
                                       ),
                                     ],
                                   ),
                                 )
-                              : Wrap(
-                                  spacing: 3,
-                                  runSpacing: 3,
-                                  children: List.generate(attempts, (index) {
-                                    final isLast = index == attempts - 1;
-                                    final color = (isLast && isSuccess)
-                                        ? Colors.green
-                                        : Colors.grey.withOpacity(0.5);
-                                    return Container(
-                                      width: 12,
-                                      height: 12,
-                                      decoration: BoxDecoration(
-                                        color: color,
-                                        borderRadius: BorderRadius.circular(2),
-                                      ),
-                                    );
-                                  }),
-                                ),
+                              : (attempts > 3
+                                    ? Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: theme.colorScheme.primary
+                                              .withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                          border: Border.all(
+                                            color: theme.colorScheme.primary
+                                                .withOpacity(0.3),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              isSuccess
+                                                  ? Icons.check_circle
+                                                  : Icons.cancel,
+                                              size: 10,
+                                              color: isSuccess
+                                                  ? Colors.green
+                                                  : Colors.red,
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              '$attempts Intentos',
+                                              style: theme.textTheme.labelSmall
+                                                  ?.copyWith(
+                                                    color: theme
+                                                        .colorScheme
+                                                        .primary,
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                            ),
+                                          ],
+                                        ),
+                                      )
+                                    : Wrap(
+                                        spacing: 3,
+                                        runSpacing: 3,
+                                        children: List.generate(attempts, (
+                                          index,
+                                        ) {
+                                          final isLast = index == attempts - 1;
+                                          final color = (isLast && isSuccess)
+                                              ? Colors.green
+                                              : Colors.grey.withOpacity(0.5);
+                                          return Container(
+                                            width: 12,
+                                            height: 12,
+                                            decoration: BoxDecoration(
+                                              color: color,
+                                              borderRadius:
+                                                  BorderRadius.circular(2),
+                                            ),
+                                          );
+                                        }),
+                                      )),
                         ),
                       ],
                     ),
@@ -752,8 +805,12 @@ class _PracticaScreenState extends ConsumerState<PracticaScreen> {
                 ),
               ),
               Icon(
-                isSuccess ? Icons.check_circle : Icons.cancel,
-                color: isSuccess ? Colors.green : Colors.red,
+                isSuccess
+                    ? Icons.check_circle
+                    : (isAbandoned ? Icons.flag_rounded : Icons.cancel),
+                color: isSuccess
+                    ? Colors.green
+                    : (isAbandoned ? Colors.orange : Colors.red),
                 size: 20,
               ),
             ],
@@ -765,8 +822,9 @@ class _PracticaScreenState extends ConsumerState<PracticaScreen> {
 
   IconData _getIconForTech(String tech) {
     final t = tech.toLowerCase();
-    if (t.contains('html')) return Icons.html;
-    if (t.contains('css')) return Icons.style;
+    if (t.contains('html')) return Icons.html_rounded;
+    if (t.contains('css')) return Icons.palette_rounded;
+    if (t.contains('style')) return Icons.style_rounded;
     if (t.contains('javascript') || t.contains('js')) return Icons.javascript;
     if (t.contains('php')) return Icons.code;
     if (t.contains('python')) return Icons.code;
