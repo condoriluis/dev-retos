@@ -129,7 +129,6 @@ class AiHistoryScreen extends ConsumerWidget {
         ),
         trailing: FilledButton(
           onPressed: () {
-            // Navegar a SolvingScreen en modo práctica con este reto
             context.push(
               '/practica/solving',
               extra: {

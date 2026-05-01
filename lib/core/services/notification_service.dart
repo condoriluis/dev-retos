@@ -16,14 +16,29 @@ class NotificationService {
 
   Future<void> init({void Function(String?)? onPayload}) async {
     tz.initializeTimeZones();
-    // Configurar la zona horaria local
     try {
-      final String timeZoneName = await FlutterTimezone.getLocalTimezone();
-      tz.setLocalLocation(tz.getLocation(timeZoneName));
-      print('🔔 NotificationService: Zona horaria establecida a $timeZoneName');
+      String timeZoneName = await FlutterTimezone.getLocalTimezone();
+
+      if (timeZoneName == 'GMT' || timeZoneName == 'UTC') {
+        final duration = DateTime.now().timeZoneOffset;
+        final hours = duration.inHours;
+
+        final etcGmtName = "Etc/GMT${hours >= 0 ? '-' : '+'}${hours.abs()}";
+        try {
+          tz.setLocalLocation(tz.getLocation(etcGmtName));
+          print('🔔 NotificationService: Fallback a zona horaria $etcGmtName');
+        } catch (_) {
+          tz.setLocalLocation(tz.getLocation('UTC'));
+        }
+      } else {
+        tz.setLocalLocation(tz.getLocation(timeZoneName));
+        print(
+          '🔔 NotificationService: Zona horaria establecida a $timeZoneName',
+        );
+      }
     } catch (e) {
       print('🔔 NotificationService: Error al establecer zona horaria: $e');
-      // Si falla, intentamos usar UTC como fallback o dejar tz.local por defecto
+      tz.setLocalLocation(tz.getLocation('UTC'));
     }
 
     const AndroidInitializationSettings initializationSettingsAndroid =
@@ -66,15 +81,14 @@ class NotificationService {
             AndroidFlutterLocalNotificationsPlugin
           >();
 
-      // Permiso de notificaciones (Android 13+)
       result = await androidPlugin?.requestNotificationsPermission() ?? false;
 
-      // Permiso de alarmas exactas (Crucial para Android 14+)
-      // Nota: Esto puede abrir una pantalla de configuración del sistema si es necesario
       try {
-        final bool? exactAlarmResult =
-            await androidPlugin?.requestExactAlarmsPermission();
-        print('🔔 NotificationService: Permiso de alarma exacta: $exactAlarmResult');
+        final bool? exactAlarmResult = await androidPlugin
+            ?.requestExactAlarmsPermission();
+        print(
+          '🔔 NotificationService: Permiso de alarma exacta: $exactAlarmResult',
+        );
       } catch (e) {
         print('🔔 NotificationService: Error al solicitar alarma exacta: $e');
       }
@@ -112,10 +126,10 @@ class NotificationService {
         : 'Es el momento perfecto para empezar una nueva racha.';
 
     await _notificationsPlugin.zonedSchedule(
-      id: 100, // ID único para el recordatorio diario
+      id: 100,
       title: plainTitle,
       body: plainBody,
-      scheduledDate: _nextInstanceOfTime(9, 0), // 9:00 AM (producción)
+      scheduledDate: _nextInstanceOfTime(9, 0),
       notificationDetails: NotificationDetails(
         android: AndroidNotificationDetails(
           'daily_retos_channel',
@@ -124,10 +138,12 @@ class NotificationService {
           importance: Importance.max,
           priority: Priority.high,
           showWhen: true,
-          color: const Color(0xFF00E676), // Verde neón profesional
+          color: const Color(0xFF00E676),
           ledColor: const Color(0xFF00E676),
           ledOnMs: 1000,
           ledOffMs: 500,
+          category: AndroidNotificationCategory.reminder,
+          visibility: NotificationVisibility.public,
           styleInformation: BigTextStyleInformation(
             bodyHtml,
             htmlFormatBigText: true,
@@ -139,12 +155,45 @@ class NotificationService {
           presentAlert: true,
           presentBadge: true,
           presentSound: true,
+          interruptionLevel: InterruptionLevel.active,
         ),
       ),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       matchDateTimeComponents: DateTimeComponents.time,
-      payload:
-          '/diario', // Payload para saber a dónde ir al tocar la notificación
+      payload: '/diario',
+    );
+  }
+
+  Future<void> scheduleTestNotification() async {
+    print(
+      '🔔 NotificationService: Programando notificación de prueba en 5 segundos...',
+    );
+
+    final now = tz.TZDateTime.now(tz.local);
+    final testTime = now.add(const Duration(seconds: 5));
+
+    await _notificationsPlugin.zonedSchedule(
+      id: 999,
+      title: '🧪 Prueba de Notificación',
+      body:
+          '¡Funciona! Si ves esto, las notificaciones están operativas en tu dispositivo.',
+      scheduledDate: testTime,
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'test_channel',
+          'Pruebas de Sistema',
+          channelDescription: 'Canal para verificar notificaciones',
+          importance: Importance.max,
+          priority: Priority.high,
+          color: Color(0xFF00E676),
+        ),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
     );
   }
 

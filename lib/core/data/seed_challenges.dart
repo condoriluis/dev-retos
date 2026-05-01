@@ -6,7 +6,7 @@ const List<Map<String, dynamic>> seedChallengesData = [
     'code_snippet': 'lista.___(item)',
     'correct_answer': 'append',
     'technology': 'Python',
-    'level': 'PRINCIPIANTE',
+    'level': 'BEGINNER',
 
   },
   {
@@ -16,7 +16,7 @@ const List<Map<String, dynamic>> seedChallengesData = [
     'code_snippet': 'async function x() { ___ task(); }',
     'correct_answer': 'await',
     'technology': 'JavaScript',
-    'level': 'INTERMEDIO',
+    'level': 'INTERMEDIATE',
 
   },
   {
@@ -26,7 +26,7 @@ const List<Map<String, dynamic>> seedChallengesData = [
     'code_snippet': 'SELECT * FROM users ___ id = 1;',
     'correct_answer': 'WHERE',
     'technology': 'SQL',
-    'level': 'PRINCIPIANTE',
+    'level': 'BEGINNER',
 
   },
   {
@@ -36,7 +36,7 @@ const List<Map<String, dynamic>> seedChallengesData = [
     'code_snippet': '___ name = "Dev";',
     'correct_answer': 'var',
     'technology': 'Dart',
-    'level': 'PRINCIPIANTE',
+    'level': 'BEGINNER',
 
   },
   {
@@ -47,7 +47,7 @@ const List<Map<String, dynamic>> seedChallengesData = [
         'class App extends StatelessWidget {\n  @override\n  Widget build(BuildContext context) {\n    return ___();\n  }\n}',
     'correct_answer': 'MaterialApp',
     'technology': 'Flutter',
-    'level': 'PRINCIPIANTE',
+    'level': 'BEGINNER',
 
   },
   {
@@ -57,7 +57,7 @@ const List<Map<String, dynamic>> seedChallengesData = [
     'code_snippet': 'display: flex;\n___: center;',
     'correct_answer': 'justify-content',
     'technology': 'CSS',
-    'level': 'INTERMEDIO',
+    'level': 'INTERMEDIATE',
 
   },
   {
@@ -67,7 +67,7 @@ const List<Map<String, dynamic>> seedChallengesData = [
     'code_snippet': 'docker ___ -t mi-app .',
     'correct_answer': 'build',
     'technology': 'Docker',
-    'level': 'INTERMEDIO',
+    'level': 'INTERMEDIATE',
 
   },
   {
@@ -77,7 +77,7 @@ const List<Map<String, dynamic>> seedChallengesData = [
     'code_snippet': 'git ___ nueva-rama',
     'correct_answer': 'checkout',
     'technology': 'Git',
-    'level': 'PRINCIPIANTE',
+    'level': 'BEGINNER',
 
   },
   {
@@ -87,7 +87,7 @@ const List<Map<String, dynamic>> seedChallengesData = [
     'code_snippet': 'let x: ___ = 10;',
     'correct_answer': 'any',
     'technology': 'TypeScript',
-    'level': 'INTERMEDIO',
+    'level': 'INTERMEDIATE',
 
   },
   {
@@ -97,7 +97,7 @@ const List<Map<String, dynamic>> seedChallengesData = [
     'code_snippet': 'System.out.___("Hola");',
     'correct_answer': 'println',
     'technology': 'Java',
-    'level': 'PRINCIPIANTE',
+    'level': 'BEGINNER',
 
   },
   {
@@ -107,7 +107,7 @@ const List<Map<String, dynamic>> seedChallengesData = [
     'code_snippet': 'class B ___ A {}',
     'correct_answer': 'extends',
     'technology': 'Java',
-    'level': 'PRINCIPIANTE',
+    'level': 'BEGINNER',
 
   },
   {
@@ -117,7 +117,7 @@ const List<Map<String, dynamic>> seedChallengesData = [
     'code_snippet': 'let ___ x = 5;',
     'correct_answer': 'mut',
     'technology': 'Rust',
-    'level': 'AVANZADO',
+    'level': 'ADVANCED',
 
   },
   {
@@ -127,7 +127,7 @@ const List<Map<String, dynamic>> seedChallengesData = [
     'code_snippet': '___ 755 script.sh',
     'correct_answer': 'chmod',
     'technology': 'Linux',
-    'level': 'AVANZADO',
+    'level': 'ADVANCED',
 
   },
   {
@@ -137,7 +137,7 @@ const List<Map<String, dynamic>> seedChallengesData = [
     'code_snippet': 'len(___)',
     'correct_answer': 'lista',
     'technology': 'Python',
-    'level': 'PRINCIPIANTE',
+    'level': 'BEGINNER',
 
   },
   {
@@ -147,7 +147,7 @@ const List<Map<String, dynamic>> seedChallengesData = [
     'code_snippet': 'arr.___(item);',
     'correct_answer': 'push',
     'technology': 'JavaScript',
-    'level': 'PRINCIPIANTE',
+    'level': 'BEGINNER',
 
   },
   {
@@ -157,7 +157,7 @@ const List<Map<String, dynamic>> seedChallengesData = [
     'code_snippet': 'SELECT * FROM users ___ name ASC;',
     'correct_answer': 'ORDER BY',
     'technology': 'SQL',
-    'level': 'INTERMEDIO',
+    'level': 'INTERMEDIATE',
 
   },
   {
@@ -167,7 +167,7 @@ const List<Map<String, dynamic>> seedChallengesData = [
     'code_snippet': '___ pi = 3.14;',
     'correct_answer': 'const',
     'technology': 'Dart',
-    'level': 'INTERMEDIO',
+    'level': 'INTERMEDIATE',
 
   },
   {
@@ -177,7 +177,7 @@ const List<Map<String, dynamic>> seedChallengesData = [
     'code_snippet': '___("Hola")',
     'correct_answer': 'Text',
     'technology': 'Flutter',
-    'level': 'PRINCIPIANTE',
+    'level': 'BEGINNER',
 
   },
   {
@@ -187,7 +187,7 @@ const List<Map<String, dynamic>> seedChallengesData = [
     'code_snippet': '___: red;',
     'correct_answer': 'color',
     'technology': 'CSS',
-    'level': 'PRINCIPIANTE',
+    'level': 'BEGINNER',
 
   },
   {
@@ -197,7 +197,7 @@ const List<Map<String, dynamic>> seedChallengesData = [
     'code_snippet': 'docker ___',
     'correct_answer': 'ps',
     'technology': 'Docker',
-    'level': 'INTERMEDIO',
+    'level': 'INTERMEDIATE',
 
   },
   {
@@ -207,7 +207,7 @@ const List<Map<String, dynamic>> seedChallengesData = [
     'code_snippet': 'git ___',
     'correct_answer': 'status',
     'technology': 'Git',
-    'level': 'PRINCIPIANTE',
+    'level': 'BEGINNER',
 
   },
   {
@@ -217,7 +217,7 @@ const List<Map<String, dynamic>> seedChallengesData = [
     'code_snippet': '___ User { name: string; }',
     'correct_answer': 'interface',
     'technology': 'TypeScript',
-    'level': 'INTERMEDIO',
+    'level': 'INTERMEDIATE',
 
   },
   {
@@ -227,7 +227,7 @@ const List<Map<String, dynamic>> seedChallengesData = [
     'code_snippet': '___ -la',
     'correct_answer': 'ls',
     'technology': 'Linux',
-    'level': 'PRINCIPIANTE',
+    'level': 'BEGINNER',
 
   },
 ];

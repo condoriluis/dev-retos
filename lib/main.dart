@@ -55,39 +55,35 @@ class _MyAppState extends ConsumerState<MyApp> {
     final client = ref.read(tursoClientProvider);
     try {
       await client.connect();
-      await ref.read(retosRepositoryProvider).initDatabase();
-      print('Base de datos inicializada!');
 
-      // Inicializar Notificaciones
-      await ref
-          .read(notificationServiceProvider)
-          .init(
-            onPayload: (payload) {
-              if (payload == '/diario') {
-                print('🔔 Tapped Notification! Navegando a $payload');
-                ref.read(goRouterProvider).go(payload!);
-              }
-            },
-          );
+      final results = await Future.wait([
+        ref.read(retosRepositoryProvider).initDatabase(),
+        ref
+            .read(notificationServiceProvider)
+            .init(
+              onPayload: (payload) {
+                if (payload == '/diario') {
+                  ref.read(goRouterProvider).go(payload!);
+                }
+              },
+            ),
+        ref.read(authRepositoryProvider).checkAuthState(client),
+      ]);
 
-      final user = await ref
-          .read(authRepositoryProvider)
-          .checkAuthState(client);
+      final user = results[2] as AuthUser?;
+
       if (user != null) {
         ref.read(currentUserProvider.notifier).update(user);
 
         final prefs = await SharedPreferences.getInstance();
-        final notifsEnabled = prefs.getBool('notifications_enabled') ?? false;
-        if (notifsEnabled) {
+        if (prefs.getBool('notifications_enabled') ?? false) {
           try {
             final userProfile = await ref.read(userProfileProvider.future);
             final streak = userProfile?['streak_count'] as int? ?? 0;
             await ref
                 .read(notificationServiceProvider)
                 .scheduleDailyReminder(streak);
-          } catch (e) {
-            print('Error sincronizando racha para notificaciones: $e');
-          }
+          } catch (_) {}
         }
       }
 
@@ -141,76 +137,122 @@ class _MyAppState extends ConsumerState<MyApp> {
   }
 }
 
-class SplashLoadingScreen extends StatelessWidget {
+class SplashLoadingScreen extends StatefulWidget {
   const SplashLoadingScreen({super.key});
+
+  @override
+  State<SplashLoadingScreen> createState() => _SplashLoadingScreenState();
+}
+
+class _SplashLoadingScreenState extends State<SplashLoadingScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _fadeAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat(reverse: true);
+    _fadeAnimation = Tween<double>(
+      begin: 0.3,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 120,
-              height: 120,
+      body: Stack(
+        children: [
+          Center(
+            child: Container(
+              width: 250,
+              height: 250,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [
-                    theme.colorScheme.primary,
-                    theme.colorScheme.secondary,
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: theme.colorScheme.primary.withOpacity(0.5),
-                    blurRadius: 30,
-                    spreadRadius: 5,
+                color: theme.colorScheme.primary.withOpacity(0.05),
+              ),
+            ),
+          ),
+          Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Hero(
+                  tag: 'logo',
+                  child: Container(
+                    width: 100,
+                    height: 100,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: theme.colorScheme.primary.withOpacity(0.2),
+                          blurRadius: 40,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
+                    child: ClipOval(child: Image.asset('assets/logotipo.png')),
                   ),
-                ],
-              ),
-              child: ClipOval(
-                child: Image.asset(
-                  'assets/logotipo.png',
-                  fit: BoxFit.cover,
                 ),
-              ),
-            ),
-            const SizedBox(height: 48),
-            Text(
-              'Dev Retos',
-              style: theme.textTheme.headlineLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-                letterSpacing: 2,
-              ),
-            ),
-            const SizedBox(height: 32),
-            SizedBox(
-              width: 200,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: LinearProgressIndicator(
-                  backgroundColor: Colors.white12,
-                  color: theme.colorScheme.primary,
-                  minHeight: 6,
+                const SizedBox(height: 40),
+                ShaderMask(
+                  shaderCallback: (bounds) => LinearGradient(
+                    colors: [Colors.white, Colors.white.withOpacity(0.5)],
+                  ).createShader(bounds),
+                  child: Text(
+                    'DEV RETOS',
+                    style: theme.textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 8,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: 160,
+                  child: Column(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: LinearProgressIndicator(
+                          backgroundColor: Colors.white.withOpacity(0.05),
+                          color: theme.colorScheme.primary,
+                          minHeight: 2,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      FadeTransition(
+                        opacity: _fadeAnimation,
+                        child: Text(
+                          'Sincronizando retos...',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: Colors.white38,
+                            letterSpacing: 1.5,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            Text(
-              'Preparando entorno...',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: Colors.white54,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

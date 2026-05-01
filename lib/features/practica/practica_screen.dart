@@ -17,23 +17,31 @@ class PracticaScreen extends ConsumerStatefulWidget {
 }
 
 class _PracticaScreenState extends ConsumerState<PracticaScreen> {
-  bool _isLoading = true;
+  static bool _sessionScanDone = false;
+  late bool _showInitialScanner;
   bool _showIntro = false;
 
   @override
   void initState() {
     super.initState();
+    _showInitialScanner = !_sessionScanDone;
+    if (_showInitialScanner) {
+      Future.delayed(const Duration(milliseconds: 1200), () {
+        if (mounted) {
+          setState(() => _showInitialScanner = false);
+          _sessionScanDone = true;
+        }
+      });
+    }
     _checkIntroStatus();
   }
 
   Future<void> _checkIntroStatus() async {
     final prefs = await SharedPreferences.getInstance();
-    await Future.delayed(const Duration(milliseconds: 400));
 
     if (mounted) {
       setState(() {
         _showIntro = !(prefs.getBool('seen_practice_intro') ?? false);
-        _isLoading = false;
       });
     }
   }
@@ -63,7 +71,7 @@ class _PracticaScreenState extends ConsumerState<PracticaScreen> {
     final techAsync = ref.watch(technologiesProvider);
     final sessionsAsync = ref.watch(practiceSessionsProvider);
 
-    if (_isLoading) {
+    if (_showInitialScanner) {
       return const Scaffold(body: ScannerLoading());
     }
 
@@ -821,23 +829,7 @@ class _PracticaScreenState extends ConsumerState<PracticaScreen> {
   }
 
   IconData _getIconForTech(String tech) {
-    final t = tech.toLowerCase();
-    if (t.contains('html')) return Icons.html_rounded;
-    if (t.contains('css')) return Icons.palette_rounded;
-    if (t.contains('style')) return Icons.style_rounded;
-    if (t.contains('javascript') || t.contains('js')) return Icons.javascript;
-    if (t.contains('php')) return Icons.code;
-    if (t.contains('python')) return Icons.code;
-    if (t.contains('react') || t.contains('next')) return Icons.webhook;
-    if (t.contains('flutter') || t.contains('dart')) return Icons.flutter_dash;
-    if (t.contains('java') && !t.contains('javascript')) return Icons.coffee;
-    if (t.contains('go')) return Icons.bolt;
-    if (t.contains('c++')) return Icons.terminal;
-    if (t.contains('sql') ||
-        t.contains('database') ||
-        t.contains('base de datos'))
-      return Icons.storage;
-    return Icons.terminal;
+    return Icons.terminal_rounded;
   }
 
   void _showPaywall(BuildContext context) {

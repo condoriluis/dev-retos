@@ -55,7 +55,10 @@ class RetosRepository {
           reward_tickets INTEGER DEFAULT 0,
           current_streak INTEGER DEFAULT 0,
           best_time INTEGER,
-          last_username_update DATETIME
+          last_username_update DATETIME,
+          last_played_date DATE,
+          last_shield_used DATE,
+          notified_shield INTEGER DEFAULT 1
         );
       ''');
         print('DEBUG DB: Tabla users verificada/creada.');
@@ -97,6 +100,9 @@ class RetosRepository {
           is_success INTEGER NOT NULL,
           attempts INTEGER DEFAULT 1,
           completed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          xp_earned INTEGER DEFAULT 0,
+          completion_date DATE,
+          is_practice INTEGER DEFAULT 0,
           FOREIGN KEY(user_id) REFERENCES users(id),
           FOREIGN KEY(challenge_id) REFERENCES challenges(id),
           UNIQUE(user_id, challenge_id)
@@ -104,86 +110,36 @@ class RetosRepository {
       ''');
         print('DEBUG DB: Tabla user_sessions verificada/creada.');
 
-        try {
-          await _client.execute(
-            'ALTER TABLE user_sessions ADD COLUMN xp_earned INTEGER DEFAULT 0',
-          );
-          print(
-            'DEBUG DB: Columna xp_earned añadida a user_sessions (Migración O.K.)',
-          );
-        } catch (_) {}
-
-        try {
-          await _client.execute(
-            'ALTER TABLE users ADD COLUMN last_played_date DATE',
-          );
-        } catch (_) {}
-        try {
-          await _client.execute(
-            'ALTER TABLE users ADD COLUMN last_shield_used DATE',
-          );
-        } catch (_) {}
-        try {
-          await _client.execute(
-            'ALTER TABLE users ADD COLUMN notified_shield INTEGER DEFAULT 1',
-          );
-        } catch (_) {}
-
         await prefs.setBool('db_initialized', true);
         print('DEBUG DB: Tablas base de datos inicializadas.');
       }
-
-      // Migraciones de esquema post-inicialización
-      try {
-        await _client.execute(
-          'ALTER TABLE user_sessions ADD COLUMN completion_date DATE',
-        );
-        print('DEBUG DB: Columna completion_date añadida a user_sessions');
-        await _client.execute(
-          "UPDATE user_sessions SET completion_date = DATE(completed_at, 'localtime') WHERE completion_date IS NULL",
-        );
-      } catch (_) {}
-
-      try {
-        await _client.execute(
-          'ALTER TABLE user_sessions ADD COLUMN is_practice INTEGER DEFAULT 0',
-        );
-        print('DEBUG DB: Columna is_practice añadida a user_sessions');
-
-        // Migrar sesiones antiguas de práctica
-        await _client.execute('''
-          UPDATE user_sessions SET is_practice = 1 
-          WHERE NOT EXISTS (
-            SELECT 1 FROM daily_challenges dc 
-            WHERE dc.challenge_id = user_sessions.challenge_id 
-            AND dc.display_date = user_sessions.completion_date
-          )
-        ''');
-      } catch (_) {}
 
       try {
         await _client.execute(
           'CREATE INDEX IF NOT EXISTS idx_user_sessions_stats ON user_sessions (user_id, is_success, completion_date)',
         );
-        print('DEBUG DB: Índice idx_user_sessions_stats verificado/creado');
-      } catch (_) {}
-      try {
-        await _client.execute(
-          'ALTER TABLE challenges ADD COLUMN creator_id TEXT',
-        );
       } catch (_) {}
 
       await _seedInitialChallenges();
 
-      for (int i = 0; i < 7; i++) {
-        final date = DateTime.now().subtract(Duration(days: i));
-        final dateStr = date.toIso8601String().substring(0, 10);
+      final List<String> last7Days = List.generate(7, (i) {
+        return DateTime.now()
+            .subtract(Duration(days: i))
+            .toIso8601String()
+            .substring(0, 10);
+      });
 
-        final checkDaily = await _client.query(
-          "SELECT * FROM daily_challenges WHERE display_date = '$dateStr'",
-        );
+      final String datesIn = last7Days.map((d) => "'$d'").join(',');
+      final existingDailies = await _client.query(
+        "SELECT display_date FROM daily_challenges WHERE display_date IN ($datesIn)",
+      );
 
-        if (checkDaily.isEmpty) {
+      final Set<String> existingDates = existingDailies
+          .map((row) => row['display_date'].toString())
+          .toSet();
+
+      for (final dateStr in last7Days) {
+        if (!existingDates.contains(dateStr)) {
           final randomChallenges = await _client.query(
             "SELECT id FROM challenges ORDER BY RANDOM() LIMIT 1",
           );
@@ -255,7 +211,6 @@ class RetosRepository {
     }
   }
 
-  /// Trae el número de intentos fallidos del usuario para un reto hoy
   Future<int> getChallengeAttempts(String challengeId, String userId) async {
     try {
       final resultSet = await _client.query('''
@@ -1209,7 +1164,6 @@ class RetosRepository {
     }
   }
 
-  /// Marca que el usuario ya vió el popup del Shield y no debe volver a mostrarse hoy.
   Future<void> acknowledgeShield(String userId) async {
     try {
       await _client.execute(

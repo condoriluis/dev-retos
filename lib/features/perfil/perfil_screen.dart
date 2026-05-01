@@ -63,10 +63,14 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
         final currentStreak = userProfile?['streak_count'] as int? ?? 0;
 
         await notificationService.scheduleDailyReminder(currentStreak);
+        await notificationService.showInstantNotification(
+          title: 'Recordatorio Activado',
+          body:
+              '¡Todo listo! Te avisaremos todos los días a las 9:00 AM para tu reto diario.',
+        );
         await prefs.setBool('notifications_enabled', true);
         setState(() => _notificationsEnabled = true);
       } else {
-        // Permisos denegados, mantenemos apagado
         setState(() => _notificationsEnabled = false);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -119,7 +123,6 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
     ref.invalidate(userProfileProvider);
     ref.invalidate(weeklyProgressProvider);
 
-    // Esperar a que recargue al menos el perfil base
     await ref.read(userProfileProvider.future);
   }
 
@@ -491,715 +494,726 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                      // Header: Avatar & Info
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Container(
-                            width: 90,
-                            height: 90,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: theme.colorScheme.surface,
-                              border: Border.all(
-                                color: theme.colorScheme.primary.withOpacity(
-                                  0.5,
+                        // Header: Avatar & Info
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Container(
+                              width: 90,
+                              height: 90,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: theme.colorScheme.surface,
+                                border: Border.all(
+                                  color: theme.colorScheme.primary.withOpacity(
+                                    0.5,
+                                  ),
+                                  width: 2,
                                 ),
-                                width: 2,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.1),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
                               ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.1),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            padding: const EdgeInsets.all(8),
-                            child: ClipOval(
-                              child: Image.asset(
-                                'assets/logotipo.png',
-                                fit: BoxFit.contain,
-                                errorBuilder: (_, __, ___) => Icon(
-                                  Icons.account_circle,
-                                  size: 70,
-                                  color: theme.colorScheme.primary,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                '@${user['username']}',
-                                style: textTheme.titleLarge?.copyWith(
-                                  fontWeight: FontWeight.bold,
+                              padding: const EdgeInsets.all(8),
+                              child: ClipOval(
+                                child: Image.asset(
+                                  'assets/logotipo.png',
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (_, __, ___) => Icon(
+                                    Icons.account_circle,
+                                    size: 70,
+                                    color: theme.colorScheme.primary,
+                                  ),
                                 ),
                               ),
-                              if (isPro) ...[
-                                const SizedBox(width: 8),
-                                const Icon(
-                                  Icons.verified,
-                                  color: Colors.blue,
-                                  size: 20,
-                                ),
-                              ] else ...[
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: const Text(
-                                    'FREE',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white54,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            user['name'] ?? 'Usuario',
-                            style: textTheme.titleMedium?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
                             ),
-                          ),
-                          if (isPro) ...[
-                            const SizedBox(height: 12),
-                            GestureDetector(
-                              onTap: () => _showProInfoDialog(context),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      Colors.blue.shade700,
-                                      Colors.blue.shade400,
-                                    ],
+                            const SizedBox(height: 6),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  '@${user['username']}',
+                                  style: textTheme.titleLarge?.copyWith(
+                                    fontWeight: FontWeight.bold,
                                   ),
-                                  borderRadius: BorderRadius.circular(25),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.blue.withOpacity(0.3),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
                                 ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.verified_user,
-                                      color: Colors.white,
-                                      size: 18,
+                                if (isPro) ...[
+                                  const SizedBox(width: 8),
+                                  const Icon(
+                                    Icons.verified,
+                                    color: Colors.blue,
+                                    size: 20,
+                                  ),
+                                ] else ...[
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
                                     ),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      'PRO',
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.withOpacity(0.2),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Text(
+                                      'FREE',
                                       style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 13,
+                                        fontSize: 10,
                                         fontWeight: FontWeight.bold,
-                                        letterSpacing: 1.1,
+                                        color: Colors.white54,
                                       ),
                                     ),
-                                  ],
+                                  ),
+                                ],
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              user['name'] ?? 'Usuario',
+                              style: textTheme.titleMedium?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            if (isPro) ...[
+                              const SizedBox(height: 12),
+                              GestureDetector(
+                                onTap: () => _showProInfoDialog(context),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        Colors.blue.shade700,
+                                        Colors.blue.shade400,
+                                      ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(25),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.blue.withOpacity(0.3),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.verified_user,
+                                        color: Colors.white,
+                                        size: 18,
+                                      ),
+                                      SizedBox(width: 8),
+                                      Text(
+                                        'PRO',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 1.1,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
-                            ),
-                          ] else ...[
-                            const SizedBox(height: 2),
-                            TextButton(
-                              onPressed: () => ProPaywall.show(context),
-                              child: const Text(
-                                'Mejorar a PRO',
-                                style: TextStyle(fontSize: 12),
+                            ] else ...[
+                              const SizedBox(height: 2),
+                              TextButton(
+                                onPressed: () => ProPaywall.show(context),
+                                child: const Text(
+                                  'Mejorar a PRO',
+                                  style: TextStyle(fontSize: 12),
+                                ),
                               ),
-                            ),
+                            ],
                           ],
-                        ],
-                      ),
+                        ),
 
-                      const SizedBox(height: 14),
-                      Text('Estadísticas', style: textTheme.titleMedium),
-                      const SizedBox(height: 16),
+                        const SizedBox(height: 14),
+                        Text('Estadísticas', style: textTheme.titleMedium),
+                        const SizedBox(height: 16),
 
-                      // Stats Grid
-                      () {
-                        final played = user['played'] ?? 0;
-                        final won = user['won'] ?? 0;
-                        final bestTime = user['best_time'] ?? '--:--';
-                        final streak = user['current_streak'] ?? 0;
+                        // Stats Grid
+                        () {
+                          final played = user['played'] ?? 0;
+                          final won = user['won'] ?? 0;
+                          final bestTime = user['best_time'] ?? '--:--';
+                          final streak = user['current_streak'] ?? 0;
 
-                        return GridView.count(
-                          crossAxisCount: 2,
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          mainAxisSpacing: 12,
-                          crossAxisSpacing: 12,
-                          childAspectRatio: 2.2,
+                          return GridView.count(
+                            crossAxisCount: 2,
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            mainAxisSpacing: 12,
+                            crossAxisSpacing: 12,
+                            childAspectRatio: 2.2,
+                            children: [
+                              _buildStatCard(
+                                context,
+                                'Jugados',
+                                played.toString(),
+                              ),
+                              _buildStatCard(
+                                context,
+                                'Ganados',
+                                won.toString(),
+                              ),
+                              _buildStatCard(
+                                context,
+                                'Racha Actual',
+                                '$streak días',
+                                trailing: isPro
+                                    ? _buildCompactShield(context, user)
+                                    : null,
+                              ),
+                              _buildStatCard(context, 'Mejor Tiempo', bestTime),
+                            ],
+                          );
+                        }(),
+
+                        const SizedBox(height: 16),
+                        _buildProZone(context, isPro),
+                        const SizedBox(height: 16),
+                        Row(
                           children: [
-                            _buildStatCard(
-                              context,
-                              'Jugados',
-                              played.toString(),
+                            Text(
+                              'Actualizar Username',
+                              style: textTheme.titleMedium,
                             ),
-                            _buildStatCard(context, 'Ganados', won.toString()),
-                            _buildStatCard(
-                              context,
-                              'Racha Actual',
-                              '$streak días',
-                              trailing: isPro
-                                  ? _buildCompactShield(context, user)
-                                  : null,
-                            ),
-                            _buildStatCard(context, 'Mejor Tiempo', bestTime),
-                          ],
-                        );
-                      }(),
-
-                      const SizedBox(height: 16),
-                      _buildProZone(context, isPro),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Text(
-                            'Actualizar Username',
-                            style: textTheme.titleMedium,
-                          ),
-                          const SizedBox(width: 0),
-                          IconButton(
-                            icon: Icon(
-                              Icons.info_outline,
-                              size: 16,
-                              color: canChangeUsername
-                                  ? theme.colorScheme.primary
-                                  : Colors.grey,
-                            ),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                            onPressed: canChangeUsername
-                                ? () {
-                                    showDialog(
-                                      context: context,
-                                      builder: (context) => Dialog(
-                                        backgroundColor: Colors.transparent,
-                                        child: Container(
-                                          padding: const EdgeInsets.all(24),
-                                          decoration: BoxDecoration(
-                                            gradient: LinearGradient(
-                                              begin: Alignment.topCenter,
-                                              end: Alignment.bottomCenter,
-                                              colors: [
-                                                Color.alphaBlend(
-                                                  theme.colorScheme.primary
-                                                      .withOpacity(0.08),
-                                                  theme.colorScheme.surface,
+                            const SizedBox(width: 0),
+                            IconButton(
+                              icon: Icon(
+                                Icons.info_outline,
+                                size: 16,
+                                color: canChangeUsername
+                                    ? theme.colorScheme.primary
+                                    : Colors.grey,
+                              ),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              onPressed: canChangeUsername
+                                  ? () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (context) => Dialog(
+                                          backgroundColor: Colors.transparent,
+                                          child: Container(
+                                            padding: const EdgeInsets.all(24),
+                                            decoration: BoxDecoration(
+                                              gradient: LinearGradient(
+                                                begin: Alignment.topCenter,
+                                                end: Alignment.bottomCenter,
+                                                colors: [
+                                                  Color.alphaBlend(
+                                                    theme.colorScheme.primary
+                                                        .withOpacity(0.08),
+                                                    theme.colorScheme.surface,
+                                                  ),
+                                                  Color.alphaBlend(
+                                                    theme.colorScheme.primary
+                                                        .withOpacity(0.18),
+                                                    theme.colorScheme.surface,
+                                                  ),
+                                                ],
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(28),
+                                              border: Border.all(
+                                                color: theme
+                                                    .colorScheme
+                                                    .outlineVariant
+                                                    .withOpacity(0.5),
+                                                width: 1.2,
+                                              ),
+                                            ),
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Row(
+                                                  children: [
+                                                    const Icon(
+                                                      Icons.info_outline,
+                                                      color: Colors.white,
+                                                      size: 28,
+                                                    ),
+                                                    const SizedBox(width: 16),
+                                                    Text(
+                                                      'Username',
+                                                      style: theme
+                                                          .textTheme
+                                                          .titleLarge
+                                                          ?.copyWith(
+                                                            color: Colors.white,
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                          ),
+                                                    ),
+                                                  ],
                                                 ),
-                                                Color.alphaBlend(
-                                                  theme.colorScheme.primary
-                                                      .withOpacity(0.18),
-                                                  theme.colorScheme.surface,
+                                                const SizedBox(height: 20),
+                                                const Text(
+                                                  'Para mantener la integridad y consistencia de la comunidad, el cambio de nombre de usuario está limitado a una vez cada 7 días. \n\nPor favor, elige tu nuevo nombre cuidadosamente.',
+                                                  style: TextStyle(
+                                                    color: Colors.white70,
+                                                    fontSize: 14,
+                                                    height: 1.5,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 24),
+                                                Center(
+                                                  child: FilledButton(
+                                                    onPressed: () =>
+                                                        Navigator.pop(context),
+                                                    style: FilledButton.styleFrom(
+                                                      backgroundColor:
+                                                          Colors.white,
+                                                      foregroundColor: theme
+                                                          .colorScheme
+                                                          .primary,
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            horizontal: 32,
+                                                            vertical: 12,
+                                                          ),
+                                                      shape: RoundedRectangleBorder(
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              12,
+                                                            ),
+                                                      ),
+                                                    ),
+                                                    child: const Text(
+                                                      'ENTENDIDO',
+                                                      style: TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                  ),
                                                 ),
                                               ],
                                             ),
-                                            borderRadius: BorderRadius.circular(
-                                              28,
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  : null,
+                              tooltip: canChangeUsername
+                                  ? 'Información sobre cambios de username'
+                                  : 'Cambio bloqueado temporalmente',
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surfaceContainerHighest
+                                .withOpacity(0.3),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: theme.colorScheme.outlineVariant
+                                  .withOpacity(0.5),
+                            ),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16.0,
+                              vertical: 8.0,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (!canChangeUsername)
+                                  Padding(
+                                    padding: const EdgeInsets.only(
+                                      bottom: 12.0,
+                                      left: 4.0,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.timer_outlined,
+                                          color: Colors.orange,
+                                          size: 16,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Text(
+                                            remainingMsg,
+                                            style: const TextStyle(
+                                              color: Colors.orange,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w500,
                                             ),
-                                            border: Border.all(
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: TextFormField(
+                                        initialValue: user['username'],
+                                        enabled: canChangeUsername,
+                                        readOnly: !canChangeUsername,
+                                        maxLength: 15,
+                                        decoration: InputDecoration(
+                                          labelText: canChangeUsername
+                                              ? 'Nuevo Username'
+                                              : 'Username Actual',
+                                          prefixText: '@',
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              30,
+                                            ),
+                                          ),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              30,
+                                            ),
+                                            borderSide: BorderSide(
                                               color: theme
                                                   .colorScheme
                                                   .outlineVariant
                                                   .withOpacity(0.5),
-                                              width: 1.2,
                                             ),
                                           ),
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Row(
-                                                children: [
-                                                  const Icon(
-                                                    Icons.info_outline,
-                                                    color: Colors.white,
-                                                    size: 28,
-                                                  ),
-                                                  const SizedBox(width: 16),
-                                                  Text(
-                                                    'Username',
-                                                    style: theme
-                                                        .textTheme
-                                                        .titleLarge
-                                                        ?.copyWith(
-                                                          color: Colors.white,
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                        ),
-                                                  ),
-                                                ],
-                                              ),
-                                              const SizedBox(height: 20),
-                                              const Text(
-                                                'Para mantener la integridad y consistencia de la comunidad, el cambio de nombre de usuario está limitado a una vez cada 7 días. \n\nPor favor, elige tu nuevo nombre cuidadosamente.',
-                                                style: TextStyle(
-                                                  color: Colors.white70,
-                                                  fontSize: 14,
-                                                  height: 1.5,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 24),
-                                              Center(
-                                                child: FilledButton(
-                                                  onPressed: () =>
-                                                      Navigator.pop(context),
-                                                  style: FilledButton.styleFrom(
-                                                    backgroundColor:
-                                                        Colors.white,
-                                                    foregroundColor: theme
-                                                        .colorScheme
-                                                        .primary,
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 32,
-                                                          vertical: 12,
-                                                        ),
-                                                    shape: RoundedRectangleBorder(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            12,
-                                                          ),
-                                                    ),
-                                                  ),
-                                                  child: const Text(
-                                                    'ENTENDIDO',
-                                                    style: TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
+                                          focusedBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              30,
+                                            ),
+                                            borderSide: BorderSide(
+                                              color: theme.colorScheme.primary,
+                                              width: 2,
+                                            ),
                                           ),
-                                        ),
-                                      ),
-                                    );
-                                  }
-                                : null,
-                            tooltip: canChangeUsername
-                                ? 'Información sobre cambios de username'
-                                : 'Cambio bloqueado temporalmente',
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surfaceContainerHighest
-                              .withOpacity(0.3),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: theme.colorScheme.outlineVariant.withOpacity(
-                              0.5,
-                            ),
-                          ),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16.0,
-                            vertical: 8.0,
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (!canChangeUsername)
-                                Padding(
-                                  padding: const EdgeInsets.only(
-                                    bottom: 12.0,
-                                    left: 4.0,
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      const Icon(
-                                        Icons.timer_outlined,
-                                        color: Colors.orange,
-                                        size: 16,
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Expanded(
-                                        child: Text(
-                                          remainingMsg,
-                                          style: const TextStyle(
-                                            color: Colors.orange,
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                                horizontal: 20,
+                                                vertical: 12,
+                                              ),
+                                          isDense: true,
+                                          counterText: "",
+                                          filled: !canChangeUsername,
+                                          fillColor: !canChangeUsername
+                                              ? Colors.white.withOpacity(0.05)
+                                              : null,
+                                          errorText: _availabilityError,
+                                          errorStyle: const TextStyle(
+                                            color: Colors.redAccent,
                                             fontSize: 12,
-                                            fontWeight: FontWeight.w500,
                                           ),
+                                          suffixIcon: canChangeUsername
+                                              ? (_isCheckingUsername
+                                                    ? const SizedBox(
+                                                        width: 20,
+                                                        height: 20,
+                                                        child: Padding(
+                                                          padding:
+                                                              EdgeInsets.all(
+                                                                12.0,
+                                                              ),
+                                                          child:
+                                                              CircularProgressIndicator(
+                                                                strokeWidth: 2,
+                                                              ),
+                                                        ),
+                                                      )
+                                                    : (_isUsernameAvailable ==
+                                                              true
+                                                          ? const Icon(
+                                                              Icons
+                                                                  .check_circle,
+                                                              color:
+                                                                  Colors.green,
+                                                            )
+                                                          : (_isUsernameAvailable ==
+                                                                    false
+                                                                ? const Icon(
+                                                                    Icons.error,
+                                                                    color: Colors
+                                                                        .red,
+                                                                  )
+                                                                : null)))
+                                              : const Icon(
+                                                  Icons.lock_outline,
+                                                  size: 18,
+                                                  color: Colors.grey,
+                                                ),
+                                        ),
+                                        onChanged: (val) {
+                                          if (canChangeUsername) {
+                                            _newUsername = val;
+                                            _checkUsername(
+                                              val,
+                                              user['username'],
+                                            );
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                    if (canChangeUsername) ...[
+                                      const SizedBox(width: 8),
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 4),
+                                        child: FilledButton(
+                                          onPressed:
+                                              (_isUsernameAvailable == true &&
+                                                  !_isCheckingUsername)
+                                              ? () {
+                                                  final text =
+                                                      _newUsername ??
+                                                      user['username']
+                                                          as String;
+                                                  if (text !=
+                                                      user['username']) {
+                                                    _submitNewUsername(
+                                                      text,
+                                                      user['id'],
+                                                    );
+                                                  }
+                                                }
+                                              : null,
+                                          child: const Text('Guardar'),
                                         ),
                                       ),
                                     ],
-                                  ),
-                                ),
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: TextFormField(
-                                      initialValue: user['username'],
-                                      enabled: canChangeUsername,
-                                      readOnly: !canChangeUsername,
-                                      maxLength: 15,
-                                      decoration: InputDecoration(
-                                        labelText: canChangeUsername
-                                            ? 'Nuevo Username'
-                                            : 'Username Actual',
-                                        prefixText: '@',
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            30,
-                                          ),
-                                        ),
-                                        enabledBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            30,
-                                          ),
-                                          borderSide: BorderSide(
-                                            color: theme
-                                                .colorScheme
-                                                .outlineVariant
-                                                .withOpacity(0.5),
-                                          ),
-                                        ),
-                                        focusedBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            30,
-                                          ),
-                                          borderSide: BorderSide(
-                                            color: theme.colorScheme.primary,
-                                            width: 2,
-                                          ),
-                                        ),
-                                        contentPadding:
-                                            const EdgeInsets.symmetric(
-                                              horizontal: 20,
-                                              vertical: 12,
-                                            ),
-                                        isDense: true,
-                                        counterText: "",
-                                        filled: !canChangeUsername,
-                                        fillColor: !canChangeUsername
-                                            ? Colors.white.withOpacity(0.05)
-                                            : null,
-                                        errorText: _availabilityError,
-                                        errorStyle: const TextStyle(
-                                          color: Colors.redAccent,
-                                          fontSize: 12,
-                                        ),
-                                        suffixIcon: canChangeUsername
-                                            ? (_isCheckingUsername
-                                                  ? const SizedBox(
-                                                      width: 20,
-                                                      height: 20,
-                                                      child: Padding(
-                                                        padding: EdgeInsets.all(
-                                                          12.0,
-                                                        ),
-                                                        child:
-                                                            CircularProgressIndicator(
-                                                              strokeWidth: 2,
-                                                            ),
-                                                      ),
-                                                    )
-                                                  : (_isUsernameAvailable ==
-                                                            true
-                                                        ? const Icon(
-                                                            Icons.check_circle,
-                                                            color: Colors.green,
-                                                          )
-                                                        : (_isUsernameAvailable ==
-                                                                  false
-                                                              ? const Icon(
-                                                                  Icons.error,
-                                                                  color: Colors
-                                                                      .red,
-                                                                )
-                                                              : null)))
-                                            : const Icon(
-                                                Icons.lock_outline,
-                                                size: 18,
-                                                color: Colors.grey,
-                                              ),
-                                      ),
-                                      onChanged: (val) {
-                                        if (canChangeUsername) {
-                                          _newUsername = val;
-                                          _checkUsername(val, user['username']);
-                                        }
-                                      },
-                                    ),
-                                  ),
-                                  if (canChangeUsername) ...[
-                                    const SizedBox(width: 8),
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 4),
-                                      child: FilledButton(
-                                        onPressed:
-                                            (_isUsernameAvailable == true &&
-                                                !_isCheckingUsername)
-                                            ? () {
-                                                final text =
-                                                    _newUsername ??
-                                                    user['username'] as String;
-                                                if (text != user['username']) {
-                                                  _submitNewUsername(
-                                                    text,
-                                                    user['id'],
-                                                  );
-                                                }
-                                              }
-                                            : null,
-                                        child: const Text('Guardar'),
-                                      ),
-                                    ),
                                   ],
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Última actualización: ${lastUpdate != null ? DateFormat('dd/MM/yyyy').format(lastUpdate) : "Nunca"}',
-                                style: const TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 12,
                                 ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Última actualización: ${lastUpdate != null ? DateFormat('dd/MM/yyyy').format(lastUpdate) : "Nunca"}',
+                                  style: const TextStyle(
+                                    color: Colors.grey,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 20),
+                        Text('Configuración', style: textTheme.titleMedium),
+                        const SizedBox(height: 8),
+
+                        Container(
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surfaceContainerHighest
+                                .withOpacity(0.3),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: theme.colorScheme.outlineVariant
+                                  .withOpacity(0.5),
+                            ),
+                          ),
+                          child: Column(
+                            children: [
+                              ListTile(
+                                leading: Icon(
+                                  Icons.email_outlined,
+                                  color: theme.colorScheme.primary,
+                                ),
+                                title: const Text('Email'),
+                                trailing: Text(
+                                  user['email'] ?? '',
+                                  style: const TextStyle(color: Colors.grey),
+                                ),
+                              ),
+                              const Divider(height: 1),
+                              ListTile(
+                                leading: Icon(
+                                  Icons.public,
+                                  color: theme.colorScheme.primary,
+                                ),
+                                title: const Text('País'),
+                                trailing: DropdownButtonHideUnderline(
+                                  child: DropdownButton<String>(
+                                    value:
+                                        _latamCountries.contains(
+                                          _selectedCountry ?? user['country'],
+                                        )
+                                        ? (_selectedCountry ?? user['country'])
+                                              as String
+                                        : 'Bolivia',
+                                    items: _latamCountries
+                                        .map(
+                                          (String value) => DropdownMenuItem(
+                                            value: value,
+                                            child: Row(
+                                              children: [
+                                                CountryFlag.fromCountryCode(
+                                                  _getCountryCode(value),
+                                                  theme: const ImageTheme(
+                                                    width: 18,
+                                                    height: 18,
+                                                    shape: Circle(),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Text(value),
+                                              ],
+                                            ),
+                                          ),
+                                        )
+                                        .toList(),
+                                    onChanged: (newValue) async {
+                                      if (newValue != null) {
+                                        setState(
+                                          () => _selectedCountry = newValue,
+                                        );
+                                        final success = await ref
+                                            .read(retosRepositoryProvider)
+                                            .updateCountry(
+                                              user['id'],
+                                              newValue,
+                                            );
+                                        if (success && mounted) {
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'País guardado exitosamente',
+                                              ),
+                                              backgroundColor: Colors.green,
+                                            ),
+                                          );
+                                          ref.invalidate(userProfileProvider);
+                                          ref.invalidate(globalRankingProvider);
+                                        }
+                                      }
+                                    },
+                                  ),
+                                ),
+                              ),
+                              const Divider(height: 1),
+                              SwitchListTile(
+                                activeThumbColor: theme.colorScheme.primary,
+                                secondary: Icon(
+                                  _notificationsEnabled
+                                      ? Icons.notifications_active
+                                      : Icons.notifications_outlined,
+                                  color: _notificationsEnabled
+                                      ? Colors.amber
+                                      : theme.colorScheme.primary,
+                                ),
+                                title: const Text('Notificaciones'),
+                                subtitle: const Text(
+                                  'Recordatorio de retos diarios',
+                                  style: TextStyle(fontSize: 11),
+                                ),
+                                value: _notificationsEnabled,
+                                onChanged: _toggleNotifications,
                               ),
                             ],
                           ),
                         ),
-                      ),
 
-                      const SizedBox(height: 20),
-                      Text('Configuración', style: textTheme.titleMedium),
-                      const SizedBox(height: 8),
-
-                      Container(
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surfaceContainerHighest
-                              .withOpacity(0.3),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: theme.colorScheme.outlineVariant.withOpacity(
-                              0.5,
+                        const SizedBox(height: 20),
+                        Text('Cuenta', style: textTheme.titleMedium),
+                        const SizedBox(height: 8),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surfaceContainerHighest
+                                .withOpacity(0.3),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: theme.colorScheme.outlineVariant
+                                  .withOpacity(0.5),
                             ),
                           ),
+                          child: Column(
+                            children: [
+                              ListTile(
+                                leading: const Icon(
+                                  Icons.logout,
+                                  color: Colors.orange,
+                                ),
+                                title: const Text(
+                                  'Cerrar Sesión',
+                                  style: TextStyle(color: Colors.orange),
+                                ),
+                                onTap: _handleLogout,
+                              ),
+                              const Divider(height: 1),
+                              ListTile(
+                                leading: const Icon(
+                                  Icons.delete_forever,
+                                  color: Colors.redAccent,
+                                ),
+                                title: const Text(
+                                  'Eliminar Cuenta',
+                                  style: TextStyle(color: Colors.redAccent),
+                                ),
+                                onTap: _handleDeleteAccount,
+                              ),
+                            ],
+                          ),
                         ),
-                        child: Column(
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            ListTile(
-                              leading: Icon(
-                                Icons.email_outlined,
-                                color: theme.colorScheme.primary,
-                              ),
-                              title: const Text('Email'),
-                              trailing: Text(
-                                user['email'] ?? '',
-                                style: const TextStyle(color: Colors.grey),
-                              ),
-                            ),
-                            const Divider(height: 1),
-                            ListTile(
-                              leading: Icon(
-                                Icons.public,
-                                color: theme.colorScheme.primary,
-                              ),
-                              title: const Text('País'),
-                              trailing: DropdownButtonHideUnderline(
-                                child: DropdownButton<String>(
-                                  value:
-                                      _latamCountries.contains(
-                                        _selectedCountry ?? user['country'],
-                                      )
-                                      ? (_selectedCountry ?? user['country'])
-                                            as String
-                                      : 'Bolivia',
-                                  items: _latamCountries
-                                      .map(
-                                        (String value) => DropdownMenuItem(
-                                          value: value,
-                                          child: Row(
-                                            children: [
-                                              CountryFlag.fromCountryCode(
-                                                _getCountryCode(value),
-                                                theme: const ImageTheme(
-                                                  width: 18,
-                                                  height: 18,
-                                                  shape: Circle(),
-                                                ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Text(value),
-                                            ],
-                                          ),
-                                        ),
-                                      )
-                                      .toList(),
-                                  onChanged: (newValue) async {
-                                    if (newValue != null) {
-                                      setState(
-                                        () => _selectedCountry = newValue,
-                                      );
-                                      final success = await ref
-                                          .read(retosRepositoryProvider)
-                                          .updateCountry(user['id'], newValue);
-                                      if (success && mounted) {
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                              'País guardado exitosamente',
-                                            ),
-                                            backgroundColor: Colors.green,
-                                          ),
-                                        );
-                                        ref.invalidate(userProfileProvider);
-                                        ref.invalidate(globalRankingProvider);
-                                      }
-                                    }
-                                  },
+                            GestureDetector(
+                              onTap: () => context.push('/terms'),
+                              child: const Text(
+                                'Términos y Condiciones',
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 12,
                                 ),
                               ),
                             ),
-                            const Divider(height: 1),
-                            SwitchListTile(
-                              activeThumbColor: theme.colorScheme.primary,
-                              secondary: Icon(
-                                _notificationsEnabled
-                                    ? Icons.notifications_active
-                                    : Icons.notifications_outlined,
-                                color: _notificationsEnabled
-                                    ? Colors.amber
-                                    : theme.colorScheme.primary,
+                            const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 12),
+                              child: Text(
+                                '•',
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 16,
+                                ),
                               ),
-                              title: const Text('Notificaciones'),
-                              subtitle: const Text(
-                                'Recordatorio de retos diarios',
-                                style: TextStyle(fontSize: 11),
+                            ),
+                            GestureDetector(
+                              onTap: () => context.push('/privacy'),
+                              child: const Text(
+                                'Privacidad',
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 12,
+                                ),
                               ),
-                              value: _notificationsEnabled,
-                              onChanged: _toggleNotifications,
                             ),
                           ],
                         ),
-                      ),
-
-                      const SizedBox(height: 20),
-                      Text('Cuenta', style: textTheme.titleMedium),
-                      const SizedBox(height: 8),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surfaceContainerHighest
-                              .withOpacity(0.3),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: theme.colorScheme.outlineVariant.withOpacity(
-                              0.5,
+                        const SizedBox(height: 12),
+                        Center(
+                          child: Text(
+                            'Versión 1.0.0 • XP Actual: ${user['xp']}',
+                            style: const TextStyle(
+                              color: Colors.grey,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
                         ),
-                        child: Column(
-                          children: [
-                            ListTile(
-                              leading: const Icon(
-                                Icons.logout,
-                                color: Colors.orange,
-                              ),
-                              title: const Text(
-                                'Cerrar Sesión',
-                                style: TextStyle(color: Colors.orange),
-                              ),
-                              onTap: _handleLogout,
-                            ),
-                            const Divider(height: 1),
-                            ListTile(
-                              leading: const Icon(
-                                Icons.delete_forever,
-                                color: Colors.redAccent,
-                              ),
-                              title: const Text(
-                                'Eliminar Cuenta',
-                                style: TextStyle(color: Colors.redAccent),
-                              ),
-                              onTap: _handleDeleteAccount,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          GestureDetector(
-                            onTap: () => context.push('/terms'),
-                            child: const Text(
-                              'Términos y Condiciones',
-                              style: TextStyle(
-                                color: Colors.grey,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                          const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 12),
-                            child: Text(
-                              '•',
-                              style: TextStyle(
-                                color: Colors.grey,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ),
-                          GestureDetector(
-                            onTap: () => context.push('/privacy'),
-                            child: const Text(
-                              'Privacidad',
-                              style: TextStyle(
-                                color: Colors.grey,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Center(
-                        child: Text(
-                          'Versión 1.0.0 • XP Actual: ${user['xp']}',
-                          style: const TextStyle(
-                            color: Colors.grey,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                    ],
+                        const SizedBox(height: 24),
+                      ],
+                    ),
                   ),
-                ),
-              );
+                );
               },
             ),
     );
@@ -1350,8 +1364,8 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
                                   backgroundColor: Colors.white12,
                                   valueColor:
                                       const AlwaysStoppedAnimation<Color>(
-                                    Colors.orangeAccent,
-                                  ),
+                                        Colors.orangeAccent,
+                                      ),
                                   minHeight: 6,
                                 );
                               },

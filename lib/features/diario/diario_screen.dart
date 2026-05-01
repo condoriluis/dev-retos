@@ -2117,71 +2117,70 @@ class _DiarioScreenState extends ConsumerState<DiarioScreen>
                   ),
                   child: Column(
                     children: [
-                      if (isAbandoned)
-                        () {
-                          final count = challengeData['attempts'] ?? 0;
-                          final timeTaken = challengeData['time_taken'] ?? 0;
-                          final m = (timeTaken / 60).floor().toString().padLeft(
-                            2,
-                            '0',
-                          );
-                          final s = (timeTaken % 60).toString().padLeft(2, '0');
-                          return Column(
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _buildMinimalStat(
-                                      'TU TIEMPO',
-                                      "$m:$s",
-                                      Icons.timer_outlined,
-                                      isAbandoned ? Colors.grey : Colors.blue,
-                                    ),
+                      () {
+                        final count = challengeData['attempts'] ?? 0;
+                        final timeTaken = challengeData['time_taken'] ?? 0;
+                        final m = (timeTaken / 60).floor().toString().padLeft(
+                          2,
+                          '0',
+                        );
+                        final s = (timeTaken % 60).toString().padLeft(2, '0');
+                        return Column(
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _buildMinimalStat(
+                                    'TU TIEMPO',
+                                    "$m:$s",
+                                    Icons.timer_outlined,
+                                    isAbandoned ? Colors.grey : Colors.blue,
                                   ),
-                                  Container(
-                                    height: 40,
-                                    width: 1,
-                                    color: Colors.white10,
+                                ),
+                                Container(
+                                  height: 40,
+                                  width: 1,
+                                  color: Colors.white10,
+                                ),
+                                Expanded(
+                                  child: _buildMinimalStat(
+                                    'INTENTOS USADOS',
+                                    '$count',
+                                    isAbandoned
+                                        ? Icons.cancel_outlined
+                                        : Icons.check_circle_outline,
+                                    isAbandoned
+                                        ? theme.colorScheme.error
+                                        : Colors.green,
                                   ),
-                                  Expanded(
-                                    child: _buildMinimalStat(
-                                      'INTENTOS USADOS',
-                                      '$count',
-                                      isAbandoned
-                                          ? Icons.cancel_outlined
-                                          : Icons.check_circle_outline,
-                                      isAbandoned
-                                          ? theme.colorScheme.error
-                                          : Colors.green,
-                                    ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 18),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: List.generate(count, (index) {
+                                final isLast = index == count - 1;
+                                return Container(
+                                  width: 20,
+                                  height: 20,
+                                  margin: const EdgeInsets.symmetric(
+                                    horizontal: 2.5,
                                   ),
-                                ],
-                              ),
-                              const SizedBox(height: 18),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: List.generate(count, (index) {
-                                  final isLast = index == count - 1;
-                                  return Container(
-                                    width: 20,
-                                    height: 20,
-                                    margin: const EdgeInsets.symmetric(
-                                      horizontal: 2.5,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: isLast
-                                          ? (isAbandoned
-                                                ? Colors.white24
-                                                : Colors.green)
-                                          : Colors.white24,
-                                      borderRadius: BorderRadius.circular(3),
-                                    ),
-                                  );
-                                }),
-                              ),
-                            ],
-                          );
-                        }(),
+                                  decoration: BoxDecoration(
+                                    color: isLast
+                                        ? (isAbandoned
+                                            ? Colors.white24
+                                            : Colors.green)
+                                        : Colors.white24,
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
+                                );
+                              }),
+                            ),
+                          ],
+                        );
+                      }(),
                       const SizedBox(height: 10),
                       Container(
                         padding: const EdgeInsets.symmetric(
