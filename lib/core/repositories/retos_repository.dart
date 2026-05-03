@@ -123,10 +123,9 @@ class RetosRepository {
       await _seedInitialChallenges();
 
       final List<String> last7Days = List.generate(7, (i) {
-        return DateTime.now()
-            .subtract(Duration(days: i))
-            .toIso8601String()
-            .substring(0, 10);
+        final now = DateTime.now();
+        final day = DateTime(now.year, now.month, now.day - i);
+        return "${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}";
       });
 
       final String datesIn = last7Days.map((d) => "'$d'").join(',');
@@ -296,7 +295,11 @@ class RetosRepository {
 
                 if (canUseShield) {
                   print('🛡️ Streak Shield activado para usuario PRO!');
-                  final yesterday = todayDate.subtract(const Duration(days: 1));
+                  final yesterday = DateTime(
+                    todayDate.year,
+                    todayDate.month,
+                    todayDate.day - 1,
+                  );
                   final yesterdayStr =
                       "${yesterday.year}-${yesterday.month.toString().padLeft(2, '0')}-${yesterday.day.toString().padLeft(2, '0')}";
 
@@ -368,7 +371,6 @@ class RetosRepository {
           'best_time': bestTimeStr,
         };
       } else if (userId.contains('guest_')) {
-        // Retornar perfil temporal para invitados que aún no están en la DB
         return {
           'id': userId,
           'username':
@@ -399,20 +401,16 @@ class RetosRepository {
     String userId,
     int timeSeconds, {
     bool usedHelp = false,
-    String?
-    knownAnswer, // Respuesta correcta pasada directamente (evita query en práctica)
+    String? knownAnswer,
     bool isPractice = false,
   }) async {
     try {
       final String todayStr = DateTime.now().toIso8601String().substring(0, 10);
 
-      // 0. Asegurar integridad del usuario (Crucial para Invitados por FK)
       await _client.execute('''
         INSERT OR IGNORE INTO users (id, username, name, email, xp, current_streak, is_pro)
         VALUES ('$userId', 'guest_${userId.substring(0, 8)}', 'Invitado', 'guest_$userId@devretos.com', 0, 0, 0)
       ''');
-
-      // 1. Metadata Gathering (Optimizado para reducir latencia de red)
       final infoSet = await _client.query('''
         SELECT 
           COALESCE(u.is_pro, 0) as is_pro,
@@ -439,7 +437,6 @@ class RetosRepository {
       if (correctAnswerRaw.isEmpty && knownAnswer == null)
         return (isCorrect: false, xpEarned: 0);
 
-      // 2. Control de límites Freemium
       if (!isPro) {
         if (prevAttempts >= 3) {
           if (tickets > 0) {
@@ -482,7 +479,6 @@ class RetosRepository {
       final normCorrect = normalize(correctAnswerRaw);
       final normUser = normalize(answer);
 
-      // Limpieza de punto final opcional
       final cleanCorrect = normCorrect.endsWith('.')
           ? normCorrect.substring(0, normCorrect.length - 1)
           : normCorrect;
@@ -1113,7 +1109,7 @@ class RetosRepository {
   Future<List<int>> getWeeklyProgress(String userId) async {
     try {
       final now = DateTime.now();
-      final sevenDaysAgo = now.subtract(const Duration(days: 7));
+      final sevenDaysAgo = DateTime(now.year, now.month, now.day - 7);
       final sevenDaysAgoStr = sevenDaysAgo.toIso8601String().substring(0, 10);
 
       final resultSet = await _client.query('''
@@ -1132,8 +1128,10 @@ class RetosRepository {
 
       final List<int> progress = [];
       for (int i = 0; i < 7; i++) {
-        final day = now.subtract(Duration(days: i));
-        final dayStr = day.toIso8601String().substring(0, 10);
+        final day = DateTime(now.year, now.month, now.day - i);
+        // Padding with 0s ensures YYYY-MM-DD
+        final dayStr =
+            "${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}";
         progress.add(dateStatus[dayStr] ?? 0);
       }
 
@@ -1206,7 +1204,7 @@ class RetosRepository {
   Future<List<Map<String, dynamic>>> getWeeklyXPProgress(String userId) async {
     try {
       final now = DateTime.now();
-      final sevenDaysAgo = now.subtract(const Duration(days: 6));
+      final sevenDaysAgo = DateTime(now.year, now.month, now.day - 6);
       final sevenDaysAgoStr = DateFormat('yyyy-MM-dd').format(sevenDaysAgo);
 
       final resultSet = await _client.query('''
@@ -1227,7 +1225,7 @@ class RetosRepository {
 
       final List<Map<String, dynamic>> results = [];
       for (int i = 6; i >= 0; i--) {
-        final day = now.subtract(Duration(days: i));
+        final day = DateTime(now.year, now.month, now.day - i);
         final dayStr = DateFormat('yyyy-MM-dd').format(day);
         results.add({'day': dayStr, 'xp': xpMap[dayStr] ?? 0});
       }

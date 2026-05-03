@@ -21,12 +21,11 @@ final proWeeklyXPProvider =
           .read(retosRepositoryProvider)
           .getWeeklyXPProgress(user.id);
 
-      // Normalizar para que SIEMPRE haya 7 días (últimos 7 días)
       final List<Map<String, dynamic>> normalizedData = [];
       final now = DateTime.now();
 
       for (int i = 6; i >= 0; i--) {
-        final date = now.subtract(Duration(days: i));
+        final date = DateTime(now.year, now.month, now.day - i);
         final dateStr = DateFormat('yyyy-MM-dd').format(date);
 
         final dayData = rawData.firstWhere(
@@ -249,6 +248,16 @@ class _DashboardView extends ConsumerWidget {
     final mastery = ref.watch(proMasteryProvider);
     final accuracy = ref.watch(proAccuracyProvider);
 
+    final userProfileAsync = ref.watch(userProfileProvider);
+    final lastShieldStr = userProfileAsync.value?['last_shield_used']
+        ?.toString();
+    final shieldDate = lastShieldStr != null
+        ? DateTime.tryParse(lastShieldStr)
+        : null;
+    final shieldDateStr = shieldDate != null
+        ? DateFormat('yyyy-MM-dd').format(shieldDate)
+        : null;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
       child: Column(
@@ -290,7 +299,10 @@ class _DashboardView extends ConsumerWidget {
                     'CRECIMIENTO XP',
                     Icons.trending_up,
                     weeklyXP.when(
-                      data: (data) => _XPLineChart(data: data),
+                      data: (data) => _XPLineChart(
+                        data: data,
+                        shieldDateStr: shieldDateStr,
+                      ),
                       loading: () => const SizedBox(height: 200),
                       error: (e, s) => Text('Error: $e'),
                     ),
@@ -452,7 +464,8 @@ class _DashboardView extends ConsumerWidget {
 
 class _XPLineChart extends StatelessWidget {
   final List<Map<String, dynamic>> data;
-  const _XPLineChart({required this.data});
+  final String? shieldDateStr;
+  const _XPLineChart({required this.data, this.shieldDateStr});
 
   @override
   Widget build(BuildContext context) {
@@ -475,10 +488,15 @@ class _XPLineChart extends StatelessWidget {
             ),
             getTooltipItems: (touchedSpots) {
               return touchedSpots.map((spot) {
+                final dateStr = data[spot.spotIndex]['day']?.toString() ?? '';
+                final isShielded =
+                    shieldDateStr != null && shieldDateStr == dateStr;
                 return LineTooltipItem(
-                  '${spot.y.toInt()} XP',
-                  const TextStyle(
-                    color: Colors.white,
+                  isShielded
+                      ? '🛡️ ${spot.y.toInt()} XP'
+                      : '${spot.y.toInt()} XP',
+                  TextStyle(
+                    color: isShielded ? Colors.greenAccent : Colors.white,
                     fontWeight: FontWeight.bold,
                     fontSize: 8,
                   ),
@@ -504,7 +522,6 @@ class _XPLineChart extends StatelessWidget {
                 final date = DateTime.tryParse(dateStr) ?? DateTime.now();
                 final dayShort = DateFormat('E', 'es_ES').format(date);
 
-                // Forzar formato L, M, M, J, V, S, D
                 String label = dayShort[0].toUpperCase();
                 if (label == 'X') label = 'M';
 
@@ -565,7 +582,28 @@ class _XPLineChart extends StatelessWidget {
             color: Colors.blueAccent,
             barWidth: 4,
             isStrokeCapRound: true,
-            dotData: const FlDotData(show: true),
+            dotData: FlDotData(
+              show: true,
+              getDotPainter: (spot, percent, barData, index) {
+                final dateStr = data[index]['day']?.toString() ?? '';
+                final isShielded =
+                    shieldDateStr != null && shieldDateStr == dateStr;
+                if (isShielded) {
+                  return FlDotCirclePainter(
+                    radius: 4,
+                    color: Colors.greenAccent,
+                    strokeWidth: 2,
+                    strokeColor: Colors.white,
+                  );
+                }
+                return FlDotCirclePainter(
+                  radius: 3,
+                  color: Colors.blueAccent,
+                  strokeWidth: 1.5,
+                  strokeColor: Colors.white,
+                );
+              },
+            ),
             belowBarData: BarAreaData(
               show: true,
               gradient: LinearGradient(

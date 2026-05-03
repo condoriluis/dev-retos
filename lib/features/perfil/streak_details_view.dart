@@ -175,9 +175,6 @@ class _StreakDetailsScreenState extends ConsumerState<StreakDetailsScreen>
                     const SizedBox(height: 48),
                     weeklyProgressAsync.when(
                       data: (progress) {
-                        // Determinar el día protegido por el escudo:
-                        // last_shield_used es el día que activó el shield,
-                        // el día protegido es ese mismo día -1 (ayer respecto al shield)
                         DateTime? shieldedDay;
                         final lastShieldStr = userAsync
                             .value?['last_shield_used']
@@ -185,9 +182,7 @@ class _StreakDetailsScreenState extends ConsumerState<StreakDetailsScreen>
                         if (lastShieldStr != null) {
                           final lastShield = DateTime.tryParse(lastShieldStr);
                           if (lastShield != null) {
-                            shieldedDay = lastShield.subtract(
-                              const Duration(days: 1),
-                            );
+                            shieldedDay = lastShield;
                           }
                         }
                         return _buildWeeklyProgressRow(
@@ -273,13 +268,9 @@ class _StreakDetailsScreenState extends ConsumerState<StreakDetailsScreen>
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
-    // Normalizar shieldedDay a medianoche para comparar por fecha
     final shieldedDate = shieldedDay != null
         ? DateTime(shieldedDay.year, shieldedDay.month, shieldedDay.day)
         : null;
-
-    // Ventana deslizante: empezamos hace 6 días para que el séptimo sea HOY
-    final firstDay = today.subtract(const Duration(days: 6));
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -291,31 +282,27 @@ class _StreakDetailsScreenState extends ConsumerState<StreakDetailsScreen>
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: List.generate(7, (index) {
-          final currentDay = firstDay.add(Duration(days: index));
-          final diffFromToday = today.difference(currentDay).inDays;
-          final currentDayNorm = DateTime(
-            currentDay.year,
-            currentDay.month,
-            currentDay.day,
+          final diffFromToday = 6 - index;
+          final currentDay = DateTime(
+            today.year,
+            today.month,
+            today.day - diffFromToday,
           );
+          final currentDayNorm = currentDay;
 
           final isShielded =
               !isSkeleton &&
               shieldedDate != null &&
               currentDayNorm == shieldedDate;
 
-          final status = (diffFromToday >= 0 && diffFromToday < 7) ? progress[diffFromToday] : 0;
+          final status = (diffFromToday >= 0 && diffFromToday < 7)
+              ? progress[diffFromToday]
+              : 0;
 
-          final isCompleted = 
-              !isSkeleton && 
-              !isShielded && 
-              status == 1;
+          final isCompleted = !isSkeleton && !isShielded && status == 1;
 
-          final isFailed = 
-              !isSkeleton && 
-              !isShielded && 
-              status == -1;
-          
+          final isFailed = !isSkeleton && !isShielded && status == -1;
+
           final isToday = diffFromToday == 0;
           final dayLabel = daysLabels[currentDay.weekday - 1];
 
@@ -366,7 +353,11 @@ class _StreakDetailsScreenState extends ConsumerState<StreakDetailsScreen>
                   ),
                 ),
                 child: !isSkeleton && isFailed
-                    ? Icon(Icons.close, color: Theme.of(context).colorScheme.error, size: 18)
+                    ? Icon(
+                        Icons.close,
+                        color: Theme.of(context).colorScheme.error,
+                        size: 18,
+                      )
                     : !isSkeleton && isCompleted
                     ? const Icon(Icons.check, color: Colors.green, size: 18)
                     : !isSkeleton && isShielded
