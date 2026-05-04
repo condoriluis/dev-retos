@@ -178,6 +178,18 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
   }
 
   Future<void> _handleDeleteAccount() async {
+    final userProfile = ref.read(userProfileProvider).value;
+    final isPro =
+        userProfile != null &&
+        (userProfile['is_pro'] == true ||
+            userProfile['is_pro'] == 1 ||
+            userProfile['is_pro']?.toString() == '1' ||
+            userProfile['is_pro']?.toString() == 'true');
+
+    final message = isPro
+        ? 'Esta acción es irreversible. Se eliminarán todos tus datos de progreso y tu acceso PRO definitivamente. ¿Deseas continuar?'
+        : 'Esta acción es irreversible. Se eliminarán todos tus datos de progreso definitivamente. ¿Deseas continuar?';
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -195,10 +207,7 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
         ),
         content: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 400),
-          child: const Text(
-            'Esta acción es irreversible. Se eliminarán todos tus datos de progreso y acceso PRO. ¿Deseas continuar?',
-            style: TextStyle(color: Colors.white70),
-          ),
+          child: Text(message, style: const TextStyle(color: Colors.white70)),
         ),
         actions: [
           TextButton(
@@ -224,13 +233,9 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
       try {
         final user = ref.read(currentUserProvider);
         if (user != null) {
-          // 1. Eliminar cuenta en Firebase Auth primero (requiere login reciente)
           await ref.read(authRepositoryProvider).deleteAccount();
-
-          // 2. Eliminar datos en Turso solo si Firebase tuvo éxito
           await ref.read(retosRepositoryProvider).deleteUserAccount(user.id);
 
-          // 3. Limpiar estado local y navegar
           ref.read(currentUserProvider.notifier).update(null);
           if (mounted) context.go('/auth');
         }
@@ -494,7 +499,6 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Header: Avatar & Info
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
@@ -642,7 +646,6 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
                         Text('Estadísticas', style: textTheme.titleMedium),
                         const SizedBox(height: 16),
 
-                        // Stats Grid
                         () {
                           final played = user['played'] ?? 0;
                           final won = user['won'] ?? 0;
@@ -1026,9 +1029,17 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
                                   color: theme.colorScheme.primary,
                                 ),
                                 title: const Text('Email'),
-                                trailing: Text(
-                                  user['email'] ?? '',
-                                  style: const TextStyle(color: Colors.grey),
+                                trailing: ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 180,
+                                  ),
+                                  child: Text(
+                                    user['email'] ?? '',
+                                    style: const TextStyle(color: Colors.grey),
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
+                                    textAlign: TextAlign.end,
+                                  ),
                                 ),
                               ),
                               const Divider(height: 1),

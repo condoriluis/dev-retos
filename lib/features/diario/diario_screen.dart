@@ -23,6 +23,7 @@ import '../../core/widgets/incorrect_answer_dialog.dart';
 import '../shared/widgets/code_viewer.dart';
 import '../perfil/streak_details_view.dart';
 import '../../core/services/security_service.dart';
+import '../../core/services/notification_service.dart';
 import '../../core/widgets/solution_revealed_dialog.dart';
 import '../../core/widgets/app_refresh_indicator.dart';
 
@@ -988,6 +989,9 @@ class _DiarioScreenState extends ConsumerState<DiarioScreen>
       );
       ref.invalidate(dailyChallengesProvider);
       _answerController.clear();
+
+      // Reprogramar notificación con mensaje de celebración para mañana
+      _rescheduleNotificationAsCompleted(userData);
     } else {
       final currentAttempts =
           ref
@@ -1010,6 +1014,25 @@ class _DiarioScreenState extends ConsumerState<DiarioScreen>
       );
 
       IncorrectAnswerDialog.show(context, remaining);
+    }
+  }
+
+  Future<void> _rescheduleNotificationAsCompleted(
+    Map<String, dynamic>? userData,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!(prefs.getBool('notifications_enabled') ?? false)) return;
+
+      final streak = userData?['streak_count'] as int? ?? 0;
+      await ref
+          .read(notificationServiceProvider)
+          .scheduleDailyReminder(streak, completedToday: true);
+      debugPrint(
+        '\ud83d\udd14 Notificaci\u00f3n actualizada: reto completado (Racha: $streak)',
+      );
+    } catch (e) {
+      debugPrint('\ud83d\udd14 Error al reprogramar notificaci\u00f3n: $e');
     }
   }
 
@@ -2170,8 +2193,8 @@ class _DiarioScreenState extends ConsumerState<DiarioScreen>
                                   decoration: BoxDecoration(
                                     color: isLast
                                         ? (isAbandoned
-                                            ? Colors.white24
-                                            : Colors.green)
+                                              ? Colors.white24
+                                              : Colors.green)
                                         : Colors.white24,
                                     borderRadius: BorderRadius.circular(3),
                                   ),

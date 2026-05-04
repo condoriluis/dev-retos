@@ -80,9 +80,15 @@ class _MyAppState extends ConsumerState<MyApp> {
           try {
             final userProfile = await ref.read(userProfileProvider.future);
             final streak = userProfile?['streak_count'] as int? ?? 0;
+
+            final challenges = await ref.read(dailyChallengesProvider.future);
+            final completedToday =
+                challenges.isNotEmpty &&
+                challenges.first['is_completed'] == true;
+
             await ref
                 .read(notificationServiceProvider)
-                .scheduleDailyReminder(streak);
+                .scheduleDailyReminder(streak, completedToday: completedToday);
           } catch (_) {}
         }
       }

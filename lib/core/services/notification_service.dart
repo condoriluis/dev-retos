@@ -105,25 +105,39 @@ class NotificationService {
     return result || iosResult;
   }
 
-  Future<void> scheduleDailyReminder(int currentStreak) async {
+  Future<void> scheduleDailyReminder(
+    int currentStreak, {
+    bool completedToday = false,
+  }) async {
     print(
-      '🔔 NotificationService: Programando recordatorio (Racha: $currentStreak) para las 9:00 AM...',
+      '🔔 NotificationService: Programando recordatorio '
+      '(Racha: $currentStreak, Completado hoy: $completedToday) para las 9:00 AM...',
     );
 
-    final titleHtml = currentStreak > 0
-        ? '<b>¡Reto Diario Listo!</b>'
-        : '<b>¡Reto Diario Listo!</b>';
+    final String plainTitle;
+    final String plainBody;
+    final String titleHtml;
+    final String bodyHtml;
 
-    final bodyHtml = currentStreak > 0
-        ? 'Llevas <b>$currentStreak días</b> de racha. ¡No la rompas! Entra ahora y demuestra tu instinto de código.'
-        : 'Es el momento perfecto para empezar una nueva racha. ¡Entra ahora y resuelve el desafío!';
-
-    final plainTitle = currentStreak > 0
-        ? '¡Reto Diario Listo! '
-        : '¡Reto Diario Listo! ';
-    final plainBody = currentStreak > 0
-        ? 'Llevas $currentStreak días de racha. ¡No la rompas!'
-        : 'Es el momento perfecto para empezar una nueva racha.';
+    if (completedToday) {
+      plainTitle = '🏆 ¡Reto de hoy completado!';
+      plainBody = currentStreak > 0
+          ? '¡Llevas $currentStreak días de racha! Mañana te espera un nuevo desafío a esta hora.'
+          : 'Hoy diste el primer paso. ¡Mañana habrá un nuevo reto esperándote!';
+      titleHtml = '<b>🏆 ¡Reto de hoy completado!</b>';
+      bodyHtml = currentStreak > 0
+          ? '¡Llevas <b>$currentStreak días</b> de racha! Mañana te espera un nuevo desafío a esta hora.'
+          : 'Hoy diste el primer paso. ¡Mañana habrá un nuevo reto esperándote!';
+    } else {
+      plainTitle = '⚡ ¡Reto Diario Listo!';
+      plainBody = currentStreak > 0
+          ? 'Llevas $currentStreak días de racha. ¡No la rompas! Entra ahora.'
+          : 'Es el momento perfecto para empezar tu racha. ¡Entra y acepta el desafío!';
+      titleHtml = '<b>⚡ ¡Reto Diario Listo!</b>';
+      bodyHtml = currentStreak > 0
+          ? 'Llevas <b>$currentStreak días</b> de racha. ¡No la rompas! Entra ahora.'
+          : 'Es el momento perfecto para empezar tu racha. ¡Entra y acepta el desafío!';
+    }
 
     await _notificationsPlugin.zonedSchedule(
       id: 100,
@@ -161,39 +175,6 @@ class NotificationService {
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       matchDateTimeComponents: DateTimeComponents.time,
       payload: '/diario',
-    );
-  }
-
-  Future<void> scheduleTestNotification() async {
-    print(
-      '🔔 NotificationService: Programando notificación de prueba en 5 segundos...',
-    );
-
-    final now = tz.TZDateTime.now(tz.local);
-    final testTime = now.add(const Duration(seconds: 5));
-
-    await _notificationsPlugin.zonedSchedule(
-      id: 999,
-      title: '🧪 Prueba de Notificación',
-      body:
-          '¡Funciona! Si ves esto, las notificaciones están operativas en tu dispositivo.',
-      scheduledDate: testTime,
-      notificationDetails: const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'test_channel',
-          'Pruebas de Sistema',
-          channelDescription: 'Canal para verificar notificaciones',
-          importance: Importance.max,
-          priority: Priority.high,
-          color: Color(0xFF00E676),
-        ),
-        iOS: DarwinNotificationDetails(
-          presentAlert: true,
-          presentBadge: true,
-          presentSound: true,
-        ),
-      ),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
     );
   }
 
